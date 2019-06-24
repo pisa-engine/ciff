@@ -1,5 +1,5 @@
 syntax = "proto3";
-package cif;
+package io.anserini.cidxf;
 
 message Posting {
   int32 docid = 1;
@@ -12,3 +12,4 @@ message PostingsList {
   int64 cf = 3;
   repeated Posting posting = 4;
 }
+
