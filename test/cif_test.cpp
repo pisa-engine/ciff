@@ -19,7 +19,7 @@ int main(int argc, char const *argv[])
   fstream in(argv[1], ios::in | ios::binary);
   google::protobuf::io::IstreamInputStream instream(&in);
   google::protobuf::io::CodedInputStream input(&instream);
-
+input.SetTotalBytesLimit(1000000000, -1);
   size_t max = strtol(argv[2], NULL, 10);
   for(size_t i = 0; i < max; ++i){
   uint32_t size;
@@ -28,7 +28,7 @@ int main(int argc, char const *argv[])
   }
     // Tell the stream not to read beyond that size.
     const auto limit = input.PushLimit(size);
-
+/*
     // Parse the message.
     if (!pl.MergeFromCodedStream(&input)) {
         return false;
@@ -36,11 +36,13 @@ int main(int argc, char const *argv[])
     if (!input.ConsumedEntireMessage()) {
         return false;
     }
+*/
+    pl.ParseFromCodedStream(&input);
 
     // Release the limit.
     input.PopLimit(limit);
 
-    std::cout << pl.term() << std::endl;
+    std::cout << pl.term() << " " << pl.posting_size()<< std::endl;
   }
 	/*
   if (!input) {
