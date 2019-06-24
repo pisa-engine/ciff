@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcif.a  CMakeFiles/cif.dir/common-index-format.pb.cc.o
+/usr/bin/ranlib libcif.a
