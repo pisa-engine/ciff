@@ -1,2 +1,0 @@
-# Hashes of file build rules.
-192e536c8c8c5433ec7b9fbaa53ab499 common-index-format.pb.cc

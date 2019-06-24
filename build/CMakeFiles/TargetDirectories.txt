@@ -1,8 +1,0 @@
-/home/amallia/common-index-format/build/CMakeFiles/rebuild_cache.dir
-/home/amallia/common-index-format/build/CMakeFiles/edit_cache.dir
-/home/amallia/common-index-format/build/CMakeFiles/cif.dir
-/home/amallia/common-index-format/build/CMakeFiles/test.dir
-/home/amallia/common-index-format/build/test/CMakeFiles/rebuild_cache.dir
-/home/amallia/common-index-format/build/test/CMakeFiles/edit_cache.dir
-/home/amallia/common-index-format/build/test/CMakeFiles/cif_test.dir
-/home/amallia/common-index-format/build/test/CMakeFiles/test.dir
