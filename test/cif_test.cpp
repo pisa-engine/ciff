@@ -15,7 +15,6 @@ int main(int argc, char const *argv[])
 
   cif::PostingsList pl;	
 
-  // Read the existing address book.
   fstream in(argv[1], ios::in | ios::binary);
   google::protobuf::io::IstreamInputStream instream(&in);
   google::protobuf::io::CodedInputStream input(&instream);
