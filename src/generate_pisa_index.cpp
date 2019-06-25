@@ -6,6 +6,19 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include "common-index-format.pb.h"
 #include "CLI/CLI.hpp"
+#include "gsl/span"
+
+
+
+
+template <typename T>
+std::ostream &write_sequence(std::ostream &os, gsl::span<T> sequence)
+{
+    auto length = static_cast<uint32_t>(sequence.size());
+    os.write(reinterpret_cast<const char *>(&length), sizeof(length));
+    os.write(reinterpret_cast<const char *>(sequence.data()), length * sizeof(T));
+    return os;
+}
 
 
 int main(int argc, char const *argv[])

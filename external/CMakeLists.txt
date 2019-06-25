@@ -8,3 +8,6 @@ EXECUTE_PROCESS(COMMAND git submodule update --init
 set(CLI11_TESTING OFF CACHE BOOL "skip trecpp testing")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/CLI11 EXCLUDE_FROM_ALL)
 
+# Add GSL
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/GSL EXCLUDE_FROM_ALL)
+
