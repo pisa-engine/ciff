@@ -13,7 +13,7 @@ int main(int argc, char const *argv[])
   // compatible with the version of the headers we compiled against.
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  io::anserini::cidxf::PostingsList pl;	
+  cif::PostingsList pl;	
 
   // Read the existing address book.
   fstream in(argv[1], ios::in | ios::binary);
