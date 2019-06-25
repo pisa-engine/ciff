@@ -12,7 +12,9 @@ target_link_libraries(cif
     protobuf::libprotobuf
 )
 
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+add_subdirectory(external)
+add_subdirectory(src)
+
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(test)
