@@ -8,7 +8,22 @@
 #include "CLI/CLI.hpp"
 #include "gsl/span"
 
+using namespace cif;
 
+void dump_postings_list(const PostingsList& postings_list) {
+    std::cerr << "Term = [" << postings_list.term() << "]" << std::endl;
+    std::cerr << "Document Frequency/Collection Term Frequency = [" 
+              << postings_list.df() << "," << postings_list.cf() << "]" 
+              << std::endl;
+   
+    int32_t prev_id = 0; 
+    for (int64_t i = 0; i < postings_list.posting_size(); ++i) {
+        const Posting& posting = postings_list.posting(i);
+        std::cerr << "[" << prev_id + posting.docid() << "," << posting.tf() << "] ";
+        prev_id = posting.docid();
+    }
+    std::cerr << std::endl; 
+}
 
 
 template <typename T>
@@ -23,6 +38,9 @@ std::ostream &write_sequence(std::ostream &os, gsl::span<T> sequence)
 
 int main(int argc, char const *argv[])
 {
+
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+
     std::string postings_filename;
     std::string output_basename;
     
@@ -35,5 +53,10 @@ int main(int argc, char const *argv[])
     std::ofstream fstream(output_basename + ".freqs");
     std::ofstream sstream(output_basename + ".sizes");
 
+    std::ifstream postings_stream(postings_filename, std::ios::binary);
+    PostingsList postings_list;
+    while (!postings_list.ParseFromIstream(&postings_stream)) {
+        dump_postings_list(postings_list);
+    }
 
 }

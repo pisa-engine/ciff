@@ -18,7 +18,7 @@ int main(int argc, char const *argv[])
   fstream in(argv[1], ios::in | ios::binary);
   google::protobuf::io::IstreamInputStream instream(&in);
   google::protobuf::io::CodedInputStream input(&instream);
-input.SetTotalBytesLimit(1000000000, -1);
+input.SetTotalBytesLimit(1000000000);
   size_t max = strtol(argv[2], NULL, 10);
   for(size_t i = 0; i < max; ++i){
   uint32_t size;
