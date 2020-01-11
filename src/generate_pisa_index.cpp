@@ -19,8 +19,9 @@ void dump_postings_list(const PostingsList& postings_list) {
     int32_t prev_id = 0; 
     for (int64_t i = 0; i < postings_list.posting_size(); ++i) {
         const Posting& posting = postings_list.posting(i);
-        std::cerr << "[" << prev_id + posting.docid() << "," << posting.tf() << "] ";
-        prev_id = posting.docid();
+        int32_t doc_id = prev_id + posting.docid();
+        std::cerr << "[" << doc_id << "," << posting.tf() << "] ";
+        prev_id = doc_id;
     }
     std::cerr << std::endl; 
 }
