@@ -69,10 +69,12 @@ int main(int argc, char const *argv[])
         google::protobuf::io::CodedInputStream::Limit size_limit = coded_stream.PushLimit(message_size);
         PostingsList postings_list;
         if(!postings_list.ParseFromCodedStream(&coded_stream)) {
-            std::cerr << "Couldn't read...\n";
+            std::cerr << "Couldn't read postings list... Exiting" << std::endl;
+            exit(EXIT_FAILURE);
         }
         coded_stream.PopLimit(size_limit);
         dump_postings_list(postings_list);
     }
 
+    delete postings_stream;
 }
