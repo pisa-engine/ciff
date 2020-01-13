@@ -4,6 +4,7 @@
 #include "google/protobuf/io/coded_stream.h"
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/util/delimited_message_util.h>
 #include "common-index-format.pb.h"
 #include "CLI/CLI.hpp"
 #include "gsl/span"
@@ -25,6 +26,8 @@ void dump_postings_list(const PostingsList& postings_list) {
     }
     std::cerr << std::endl; 
 }
+
+
 
 
 template <typename T>
@@ -54,9 +57,21 @@ int main(int argc, char const *argv[])
     std::ofstream fstream(output_basename + ".freqs");
     std::ofstream sstream(output_basename + ".sizes");
 
-    std::ifstream postings_stream(postings_filename, std::ios::binary);
-    PostingsList postings_list;
-    while (!postings_list.ParseFromIstream(&postings_stream)) {
+    std::ifstream postings_data(postings_filename, std::ios::binary);
+    google::protobuf::io::ZeroCopyInputStream* postings_stream = new google::protobuf::io::IstreamInputStream(&postings_data);
+    google::protobuf::io::CodedInputStream coded_stream(postings_stream);
+
+    while (true) {
+        uint32_t message_size;
+        if (!coded_stream.ReadVarint32(&message_size)) {
+          break; // Assuming we're done now...
+        }
+        google::protobuf::io::CodedInputStream::Limit size_limit = coded_stream.PushLimit(message_size);
+        PostingsList postings_list;
+        if(!postings_list.ParseFromCodedStream(&coded_stream)) {
+            std::cerr << "Couldn't read...\n";
+        }
+        coded_stream.PopLimit(size_limit);
         dump_postings_list(postings_list);
     }
 
