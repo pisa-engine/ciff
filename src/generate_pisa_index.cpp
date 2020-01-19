@@ -27,6 +27,10 @@ void dump_postings_list(const PostingsList& postings_list) {
     std::cerr << std::endl; 
 }
 
+void dump_term(const PostingsList& postings_list, uint32_t term_id) {
+  std::cerr << postings_list.term() << " " << term_id << " " << postings_list.df() << "\n";
+}
+
 template <typename T>
 std::ostream &write_sequence(std::ostream &os, gsl::span<T> sequence)
 {
@@ -43,7 +47,17 @@ struct inverted_index {
   std::unordered_map<uint32_t, std::vector<uint32_t>> m_frequencies {};
   std::map<uint32_t, uint32_t> m_document_sizes {};
   std::vector<std::string> m_plain_terms {};
-  
+ 
+  void add_document_lengths(const std::string doclen_file) {
+      std::ifstream input_lengths(doclen_file);
+      uint32_t doc_id;
+      uint32_t size;
+      while (input_lengths >> doc_id >> size) {
+          m_document_sizes[doc_id] = size;
+      }  
+      std::cerr << "Read " << m_document_sizes.size() << " document lengths."
+                << std::endl;
+  } 
 
   void add_postings_list(const PostingsList& postings_list, uint32_t term_id) {
 
@@ -77,7 +91,6 @@ struct inverted_index {
           uint32_t term_freq = posting.tf();
           m_documents[term_id].push_back(doc_id);
           m_frequencies[term_id].push_back(term_freq);
-          m_document_sizes[doc_id] += term_freq;
           prev_id = doc_id;
       }
    }
@@ -125,13 +138,18 @@ int main(int argc, char const *argv[])
 
     std::string postings_filename;
     std::string output_basename;
+    std::string doclen_filename;
     
     CLI::App app{"generate_pisa_index - a tool for generating a PISA index from a common index format."};
     app.add_option("-p,--postings", postings_filename, "Postings filename")->required();
+    app.add_option("-d,--doclen", doclen_filename, "Document lengths filename")->required();
     app.add_option("-o,--output", output_basename, "Output basename")->required();
     CLI11_PARSE(app, argc, argv);
 
     inverted_index invidx;
+    
+    // Read document length tsv
+    invidx.add_document_lengths(doclen_filename);
 
     std::ifstream postings_data(postings_filename, std::ios::binary);
     google::protobuf::io::ZeroCopyInputStream* postings_stream = new google::protobuf::io::IstreamInputStream(&postings_data);
@@ -156,6 +174,5 @@ int main(int argc, char const *argv[])
   
     std::cerr << "Writing canonical index..." << std::endl;
     write(output_basename, invidx, term_id);
-
     delete postings_stream;
 }
