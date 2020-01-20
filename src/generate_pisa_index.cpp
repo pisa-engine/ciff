@@ -75,8 +75,8 @@ struct inverted_index {
           prev_id = doc_id;
       }
   
-      m_documents.push_back(documents);
-      m_frequencies.push_back(frequencies);
+      m_documents.push_back(std::move(documents));
+      m_frequencies.push_back(std::move(frequencies));
    }
 };
 
