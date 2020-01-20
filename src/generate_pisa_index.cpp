@@ -25,15 +25,22 @@ struct inverted_index {
 
   std::vector<std::vector<uint32_t>> m_documents {};
   std::vector<std::vector<uint32_t>> m_frequencies {};
-  std::vector<std::pair<uint32_t, uint32_t>> m_document_sizes {};
+  std::vector<uint32_t> m_document_sizes {};
   std::vector<std::string> m_plain_terms {};
  
   void add_document_lengths(const std::string& doclen_file) {
       std::ifstream input_lengths(doclen_file);
       uint32_t doc_id;
       uint32_t size;
+      uint32_t expected_id = 0;
       while (input_lengths >> doc_id >> size) {
-          m_document_sizes.emplace_back(doc_id, size);
+          if (doc_id != expected_id) {
+              std::cerr << "Document Length file needs to be sorted. Exiting."
+                        << std::endl;
+              exit(EXIT_FAILURE);
+          }
+          m_document_sizes.emplace_back(size);
+          ++expected_id;
       }  
       std::cerr << "Read " << m_document_sizes.size() << " document lengths."
                 << std::endl;
@@ -82,7 +89,7 @@ struct inverted_index {
 
 
 void write(std::string const &output_basename,
-           inverted_index &index) {
+           inverted_index const &index) {
 
     std::ofstream dstream(output_basename + ".docs");
     std::ofstream fstream(output_basename + ".freqs");
@@ -99,14 +106,7 @@ void write(std::string const &output_basename,
         lexstream << index.m_plain_terms[term_id] << std::endl;
     }
 
-    std::sort(index.m_document_sizes.begin(), index.m_document_sizes.end());
-    std::vector<uint32_t> doc_sizes;
-    std::transform(index.m_document_sizes.begin(), index.m_document_sizes.end(), 
-                   std::back_inserter(doc_sizes), 
-                   [](const auto &pair) {
-        return pair.second;
-    });
-    write_sequence(sstream, gsl::span<uint32_t const>(doc_sizes));
+    write_sequence(sstream, gsl::span<uint32_t const>(index.m_document_sizes));
 }
 
 int main(int argc, char const *argv[])
