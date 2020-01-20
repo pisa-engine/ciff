@@ -39,7 +39,7 @@ struct inverted_index {
                         << std::endl;
               exit(EXIT_FAILURE);
           }
-          m_document_sizes.emplace_back(size);
+          m_document_sizes.push_back(size);
           ++expected_id;
       }  
       std::cerr << "Read " << m_document_sizes.size() << " document lengths."
@@ -51,18 +51,16 @@ struct inverted_index {
       auto term_id = static_cast<uint32_t>(m_documents.size());
 
       if (term_id % 10000 == 0) {
-          std::cerr << "Processing list " << term_id << "..." << std::endl;
+          std::cerr << "Processing list " << term_id << "...\n";
       }
 
       std::string term = postings_list.term();
-      m_plain_terms.emplace_back(term);
+      m_plain_terms.push_back(term);
 
       uint32_t doc_freq = postings_list.df();
 
-      std::vector<uint32_t> documents;
-      std::vector<uint32_t> frequencies;
-      documents.resize(doc_freq);
-      frequencies.resize(doc_freq);
+      std::vector<uint32_t> documents(doc_freq);
+      std::vector<uint32_t> frequencies(doc_freq);
 
       uint32_t pl_size = postings_list.posting_size();
 
@@ -130,14 +128,11 @@ int main(int argc, char const *argv[])
     invidx.add_document_lengths(doclen_filename);
 
     std::ifstream postings_data(postings_filename, std::ios::binary);
-    google::protobuf::io::ZeroCopyInputStream* postings_stream = new google::protobuf::io::IstreamInputStream(&postings_data);
-    google::protobuf::io::CodedInputStream coded_stream(postings_stream);
+    google::protobuf::io::IstreamInputStream postings_stream(&postings_data);
+    google::protobuf::io::CodedInputStream coded_stream(&postings_stream);
 
-    while (true) {
-        uint32_t message_size;
-        if (!coded_stream.ReadVarint32(&message_size)) {
-          break; // Assuming we're done now...
-        }
+    uint32_t message_size;
+    while(coded_stream.ReadVarint32(&message_size)) {
         google::protobuf::io::CodedInputStream::Limit size_limit = coded_stream.PushLimit(message_size);
         PostingsList postings_list;
         if(!postings_list.ParseFromCodedStream(&coded_stream)) {
@@ -150,5 +145,4 @@ int main(int argc, char const *argv[])
   
     std::cerr << "Writing canonical index..." << std::endl;
     write(output_basename, invidx);
-    delete postings_stream;
 }
