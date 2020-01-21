@@ -42,7 +42,7 @@ struct inverted_index {
           m_document_sizes.push_back(size);
           ++expected_id;
       }  
-      std::cerr << "Read " << m_document_sizes.size() << " document lengths."
+      std::cout << "Read " << m_document_sizes.size() << " document lengths."
                 << std::endl;
   } 
 
@@ -51,7 +51,7 @@ struct inverted_index {
       auto term_id = static_cast<uint32_t>(m_documents.size());
 
       if (term_id % 10000 == 0) {
-          std::cerr << "Processing list " << term_id << "...\n";
+          std::cout << "Processing list " << term_id << "...\n";
       }
 
       std::string term = postings_list.term();
@@ -143,6 +143,6 @@ int main(int argc, char const *argv[])
         invidx.add_postings_list(postings_list);
     }
   
-    std::cerr << "Writing canonical index..." << std::endl;
+    std::cout << "Writing canonical index..." << std::endl;
     write(output_basename, invidx);
 }
