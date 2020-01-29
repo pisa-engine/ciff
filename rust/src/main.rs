@@ -53,8 +53,6 @@ where
 fn write_document_lengths(input: &Path, output_basename: &str) -> Result<u32> {
     eprintln!("Processing document lengths...");
     let input_file = File::open(input)?;
-    let input_size = input.metadata()?.len();
-    assert_eq!(input_size % 4, 0);
 
     let num_documents = BufReader::new(&File::open(input)?)
         .lines()
