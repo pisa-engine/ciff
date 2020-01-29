@@ -1,0 +1,18 @@
+[package]
+name = "common-index-format"
+version = "0.1.0"
+authors = ["Michal Siedlaczek <michal.siedlaczek@nyu.edu>"]
+edition = "2018"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+protobuf = "2.10"
+structopt = { version = "0.3", features = [ "paw" ] }
+paw = "1.0"
+num = "0.2"
+indicatif = "0.13"
+
+[build-dependencies]
+protobuf-codegen-pure = "2.3"
