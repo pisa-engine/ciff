@@ -35,6 +35,6 @@ build/
 
 
 # Rust
-/target/
+target
 Cargo.lock
 **/*.rs.bk
