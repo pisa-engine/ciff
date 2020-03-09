@@ -2,13 +2,14 @@ use indicatif::{ProgressBar, ProgressStyle};
 use num::ToPrimitive;
 use protobuf::CodedInputStream;
 use std::error::Error;
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
-use std::mem::drop;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod proto;
+use proto::DocRecord;
+use proto::Header;
 use proto::PostingsList;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -24,14 +25,12 @@ fn pb_style() -> ProgressStyle {
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "cif2pisa",
-    about = "Generates a PISA index from a Common Index Format"
+    name = "ciff2pisa",
+    about = "Generates a PISA index from a Common Index Format [v1]"
 )]
 struct Args {
-    #[structopt(short, long, help = "Path to postings file")]
-    postings: PathBuf,
-    #[structopt(short, long = "doclen", help = "Path to document lengths file")]
-    document_lengths: PathBuf,
+    #[structopt(short, long, help = "Path to ciff export file")]
+    ciff_file: PathBuf,
     #[structopt(short, long, help = "Output basename")]
     output: String,
 }
@@ -50,57 +49,46 @@ where
     Ok(())
 }
 
-fn write_document_lengths(input: &Path, output_basename: &str) -> Result<u32> {
-    eprintln!("Processing document lengths...");
-    let input_file = File::open(input)?;
-
-    let num_documents = BufReader::new(&File::open(input)?)
-        .lines()
-        .count()
-        .to_u32()
-        .ok_or("Number of documents too large (must fit in u32)")?;
-
-    let input = BufReader::new(&input_file);
-    let mut sizes = BufWriter::new(File::create(format!("{}.sizes", output_basename))?);
-    let mut trecids = BufWriter::new(File::create(format!("{}.documents", output_basename))?);
-
-    let bar = ProgressBar::new(num_documents as u64);
-    bar.set_style(pb_style());
-    bar.set_draw_delta(num_documents as u64 / 100);
-    sizes.write_all(&num_documents.to_ne_bytes())?;
-    for (expected_docid, line) in input.lines().enumerate() {
-        let line = line?;
-        let mut columns = line.split('\t');
-        let docid: u32 = columns.next().ok_or("Corrupted file")?.parse()?;
-        let trecid = columns.next().ok_or("Corrupted file")?;
-        let length: u32 = columns.next().ok_or("Corrupted file")?.parse()?;
-        assert_eq!(
-            docid as usize, expected_docid,
-            "Document sizes must come in order"
-        );
-        sizes.write_all(&length.to_ne_bytes())?;
-        writeln!(trecids, "{}", trecid)?;
-        bar.inc(1);
-    }
-    bar.finish();
-    Ok(num_documents)
+fn print_header(header: &Header) {
+    println!("----- CIFF HEADER -----");
+    println!("Version: {}", header.get_version());
+    println!("No. Postings Lists: {}", header.get_num_postings_lists());
+    println!(
+        "Total Postings Lists: {}",
+        header.get_total_postings_lists()
+    );
+    println!("No. Documents: {}", header.get_num_docs());
+    println!("Total Documents: {}", header.get_total_docs());
+    println!(
+        "Total Terms in Collection {}",
+        header.get_total_terms_in_collection()
+    );
+    println!(
+        "Average Document Length: {}",
+        header.get_average_doclength()
+    );
+    println!("Description: {}", header.get_description());
+    println!("-----------------------");
 }
 
 fn gen(args: Args) -> Result<()> {
-    let mut postings_reader = File::open(args.postings)?;
-    let mut input = CodedInputStream::new(&mut postings_reader);
+    let mut ciff_reader = File::open(args.ciff_file)?;
+    let mut input = CodedInputStream::new(&mut ciff_reader);
     let mut documents = BufWriter::new(File::create(format!("{}.docs", args.output))?);
     let mut frequencies = BufWriter::new(File::create(format!("{}.freqs", args.output))?);
     let mut terms = BufWriter::new(File::create(format!("{}.terms", args.output))?);
 
-    let num_documents = write_document_lengths(&args.document_lengths, &args.output)?;
+    // Read protobuf header
+    let header = input.read_message::<Header>()?;
+    let num_documents = header.get_num_docs();
+    print_header(&header);
 
     eprintln!("Processing postings...");
-    encode_sequence(&mut documents, 1, [0_u32].iter().copied())?;
+    encode_sequence(&mut documents, 1, [num_documents].iter().copied())?;
     let bar = ProgressBar::new(262);
     bar.set_style(pb_style());
     bar.set_draw_delta(10);
-    while !input.eof()? {
+    for _ in 0..header.get_num_postings_lists() {
         let posting_list = input.read_message::<PostingsList>()?;
 
         let length = posting_list
@@ -108,7 +96,7 @@ fn gen(args: Args) -> Result<()> {
             .to_u32()
             .ok_or_else(|| format!("Cannot cast to u32: {}", posting_list.get_df()))?;
 
-        let postings = posting_list.get_posting();
+        let postings = posting_list.get_postings();
 
         encode_sequence(
             &mut documents,
@@ -135,15 +123,45 @@ fn gen(args: Args) -> Result<()> {
     frequencies.flush()?;
     terms.flush()?;
 
-    drop(documents);
-    let mut documents = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(false)
-        .append(false)
-        .open(format!("{}.docs", args.output))?;
-    documents.seek(SeekFrom::Start(0))?;
-    encode_sequence(&mut documents, 1, [num_documents].iter().copied())?;
+    eprintln!("Processing document lengths...");
+
+    let mut sizes = BufWriter::new(File::create(format!("{}.sizes", args.output))?);
+    let mut trecids = BufWriter::new(File::create(format!("{}.documents", args.output))?);
+
+    let bar = ProgressBar::new(num_documents as u64);
+    bar.set_style(pb_style());
+    bar.set_draw_delta(num_documents as u64 / 100);
+    sizes.write_all(&num_documents.to_ne_bytes())?;
+
+    let expected_docs: usize = header
+        .get_num_docs()
+        .to_usize()
+        .ok_or_else(|| format!("Cannot cast to usize: {}", header.get_num_docs()))?;
+
+    for docs_seen in 0..expected_docs {
+        let doc_record = input.read_message::<DocRecord>()?;
+
+        let docid: u32 = doc_record
+            .get_docid()
+            .to_u32()
+            .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_docid()))?;
+
+        let trecid = doc_record.get_collection_docid();
+        let length: u32 = doc_record
+            .get_doclength()
+            .to_u32()
+            .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_doclength()))?;
+
+        assert_eq!(
+            docid as usize, docs_seen,
+            "Document sizes must come in order"
+        );
+
+        sizes.write_all(&length.to_ne_bytes())?;
+        writeln!(trecids, "{}", trecid)?;
+        bar.inc(1);
+    }
+    bar.finish();
 
     Ok(())
 }
