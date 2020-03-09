@@ -2,16 +2,15 @@ use indicatif::{ProgressBar, ProgressStyle};
 use num::ToPrimitive;
 use protobuf::CodedInputStream;
 use std::error::Error;
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::mem::drop;
-use std::path::{PathBuf};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod proto;
+use proto::DocRecord;
 use proto::Header;
 use proto::PostingsList;
-use proto::DocRecord;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -50,16 +49,25 @@ where
     Ok(())
 }
 
-fn print_header(hdr: Header) {
+fn print_header(header: &Header) {
     println!("----- CIFF HEADER -----");
-    println!("Version: {}", hdr.get_version());
-    println!("No. Postings Lists: {}", hdr.get_num_postings_lists());
-    println!("Total Postings Lists: {}", hdr.get_total_postings_lists());
-    println!("No. Documents: {}", hdr.get_num_docs());
-    println!("Total Documents: {}", hdr.get_total_docs());
-    println!("Total Terms in Collection {}", hdr.get_total_terms_in_collection());
-    println!("Average Document Length: {}", hdr.get_average_doclength());
-    println!("Description: {}", hdr.get_description());
+    println!("Version: {}", header.get_version());
+    println!("No. Postings Lists: {}", header.get_num_postings_lists());
+    println!(
+        "Total Postings Lists: {}",
+        header.get_total_postings_lists()
+    );
+    println!("No. Documents: {}", header.get_num_docs());
+    println!("Total Documents: {}", header.get_total_docs());
+    println!(
+        "Total Terms in Collection {}",
+        header.get_total_terms_in_collection()
+    );
+    println!(
+        "Average Document Length: {}",
+        header.get_average_doclength()
+    );
+    println!("Description: {}", header.get_description());
     println!("-----------------------");
 }
 
@@ -73,17 +81,14 @@ fn gen(args: Args) -> Result<()> {
     // Read protobuf header
     let header = input.read_message::<Header>()?;
     let num_documents = header.get_num_docs();
-    print_header(header.clone());
-
+    print_header(&header);
 
     eprintln!("Processing postings...");
-    encode_sequence(&mut documents, 1, [0_u32].iter().copied())?;
+    encode_sequence(&mut documents, 1, [num_documents].iter().copied())?;
     let bar = ProgressBar::new(262);
     bar.set_style(pb_style());
     bar.set_draw_delta(10);
-    let mut postings_seen = 0;
-    let expected_postings = header.get_num_postings_lists();
-    while postings_seen < expected_postings {
+    for _ in 0..header.get_num_postings_lists() {
         let posting_list = input.read_message::<PostingsList>()?;
 
         let length = posting_list
@@ -110,7 +115,6 @@ fn gen(args: Args) -> Result<()> {
 
         writeln!(terms, "{}", posting_list.get_term())?;
 
-        postings_seen += 1;
         bar.inc(1);
     }
     bar.finish();
@@ -118,16 +122,6 @@ fn gen(args: Args) -> Result<()> {
     documents.flush()?;
     frequencies.flush()?;
     terms.flush()?;
-
-    drop(documents);
-    let mut documents = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(false)
-        .append(false)
-        .open(format!("{}.docs", args.output))?;
-    documents.seek(SeekFrom::Start(0))?;
-    encode_sequence(&mut documents, 1, [num_documents].iter().copied())?;
 
     eprintln!("Processing document lengths...");
 
@@ -139,43 +133,37 @@ fn gen(args: Args) -> Result<()> {
     bar.set_draw_delta(num_documents as u64 / 100);
     sizes.write_all(&num_documents.to_ne_bytes())?;
 
-    let mut docs_seen: usize = 0;
     let expected_docs: usize = header
-                          .get_num_docs()
-                          .to_usize()
-                          .ok_or_else(|| format!("Cannot cast to usize: {}", header.get_num_docs()))?;
+        .get_num_docs()
+        .to_usize()
+        .ok_or_else(|| format!("Cannot cast to usize: {}", header.get_num_docs()))?;
 
-
-    while docs_seen < expected_docs {
-
+    for docs_seen in 0..expected_docs {
         let doc_record = input.read_message::<DocRecord>()?;
 
         let docid: u32 = doc_record
-                  .get_docid()
-                  .to_u32()
-                  .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_docid()))?;
+            .get_docid()
+            .to_u32()
+            .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_docid()))?;
 
         let trecid = doc_record.get_collection_docid();
         let length: u32 = doc_record
-                  .get_doclength()
-                  .to_u32()
-                  .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_doclength()))?;
-
+            .get_doclength()
+            .to_u32()
+            .ok_or_else(|| format!("Cannot cast to u32: {}", doc_record.get_doclength()))?;
 
         assert_eq!(
             docid as usize, docs_seen,
             "Document sizes must come in order"
         );
- 
-       sizes.write_all(&length.to_ne_bytes())?;
+
+        sizes.write_all(&length.to_ne_bytes())?;
         writeln!(trecids, "{}", trecid)?;
         bar.inc(1);
-       docs_seen += 1;
     }
     bar.finish();
 
     Ok(())
-
 }
 
 #[paw::main]
