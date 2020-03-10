@@ -1,4 +1,4 @@
-extern crate protobuf_codegen_pure;
+//! Here, we generate Rust code from a proto file before project compilation.
 
 fn main() {
     protobuf_codegen_pure::run(protobuf_codegen_pure::Args {

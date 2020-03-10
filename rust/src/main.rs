@@ -1,6 +1,21 @@
+//! This program generates a PISA index from a Common Index Format [v1]
+//! Refer to [`osirrc/ciff`](https://github.com/osirrc/ciff) on Github
+//! for more detailed information about the format.
+
+#![warn(
+    missing_docs,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications
+)]
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::module_name_repetitions, clippy::default_trait_access)]
+
 use indicatif::{ProgressBar, ProgressStyle};
 use num::ToPrimitive;
 use protobuf::CodedInputStream;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -8,9 +23,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod proto;
-use proto::DocRecord;
-use proto::Header;
-use proto::PostingsList;
+use proto::{DocRecord, Header, Posting, PostingsList};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -80,14 +93,15 @@ fn gen(args: Args) -> Result<()> {
 
     // Read protobuf header
     let header = input.read_message::<Header>()?;
-    let num_documents = header.get_num_docs();
+    let num_documents =
+        u32::try_from(header.get_num_docs()).expect("Number of documents must be non-negative.");
     print_header(&header);
 
     eprintln!("Processing postings...");
     encode_sequence(&mut documents, 1, [num_documents].iter().copied())?;
-    let bar = ProgressBar::new(262);
-    bar.set_style(pb_style());
-    bar.set_draw_delta(10);
+    let progress = ProgressBar::new(262);
+    progress.set_style(pb_style());
+    progress.set_draw_delta(10);
     for _ in 0..header.get_num_postings_lists() {
         let posting_list = input.read_message::<PostingsList>()?;
 
@@ -110,14 +124,14 @@ fn gen(args: Args) -> Result<()> {
         encode_sequence(
             &mut frequencies,
             length,
-            postings.iter().map(|p| p.get_tf()),
+            postings.iter().map(Posting::get_tf),
         )?;
 
         writeln!(terms, "{}", posting_list.get_term())?;
 
-        bar.inc(1);
+        progress.inc(1);
     }
-    bar.finish();
+    progress.finish();
 
     documents.flush()?;
     frequencies.flush()?;
@@ -128,9 +142,9 @@ fn gen(args: Args) -> Result<()> {
     let mut sizes = BufWriter::new(File::create(format!("{}.sizes", args.output))?);
     let mut trecids = BufWriter::new(File::create(format!("{}.documents", args.output))?);
 
-    let bar = ProgressBar::new(num_documents as u64);
-    bar.set_style(pb_style());
-    bar.set_draw_delta(num_documents as u64 / 100);
+    let progress = ProgressBar::new(u64::from(num_documents));
+    progress.set_style(pb_style());
+    progress.set_draw_delta(u64::from(num_documents) / 100);
     sizes.write_all(&num_documents.to_ne_bytes())?;
 
     let expected_docs: usize = header
@@ -159,9 +173,9 @@ fn gen(args: Args) -> Result<()> {
 
         sizes.write_all(&length.to_ne_bytes())?;
         writeln!(trecids, "{}", trecid)?;
-        bar.inc(1);
+        progress.inc(1);
     }
-    bar.finish();
+    progress.finish();
 
     Ok(())
 }
