@@ -2,6 +2,13 @@
 //! Refer to [`osirrc/ciff`](https://github.com/osirrc/ciff) on Github
 //! for more detailed information about the format.
 
+#![warn(
+    missing_docs,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications
+)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::default_trait_access)]
 
