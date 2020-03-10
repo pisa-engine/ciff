@@ -1,0 +1,8 @@
+[build]
+rustflags = [
+    "-Wmissing_docs",
+    "-Wtrivial_casts",
+    "-Wtrivial_numeric_casts",
+    "-Wunused_import_braces",
+    "-Wunused_qualifications"
+]
