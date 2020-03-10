@@ -6,13 +6,11 @@ Common Index File Format [CIFF](https://github.com/osirrc/ciff/) is an inverted 
 
 
 ## Versions
-We currently provide both a Rust and a Python binary for converting CIFF data to a [PISA canonical index](https://pisa.readthedocs.io/en/latest/inverting.html#inverted-index-format).
-
-## Dependencies 
-
-- protocol buffers C++ library
-- compiler for protocol buffer definition files
+We currently provide a Rust binary for converting CIFF data to a [PISA canonical index](https://pisa.readthedocs.io/en/latest/inverting.html#inverted-index-format).
 
 
+## Build
 
+Just run `cargo build --release` to build the binary. It can then be executed:
+`./target/release/common-index-format`
 

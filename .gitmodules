@@ -1,9 +1,0 @@
-[submodule "src/external/CLI11"]
-	path = src/external/CLI11
-	url = https://github.com/CLIUtils/CLI11.git
-[submodule "external/CLI11"]
-	path = external/CLI11
-	url = https://github.com/CLIUtils/CLI11.git
-[submodule "external/GSL"]
-	path = external/GSL
-	url = https://github.com/microsoft/GSL.git
