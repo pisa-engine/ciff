@@ -1,5 +1,5 @@
 [package]
-name = "common-index-format"
+name = "ciff"
 version = "0.1.0"
 authors = ["Michal Siedlaczek <michal.siedlaczek@nyu.edu>"]
 edition = "2018"
@@ -9,10 +9,13 @@ build = "build.rs"
 
 [dependencies]
 protobuf = "2.10"
-structopt = { version = "0.3", features = [ "paw" ] }
-paw = "1.0"
+structopt = "0.3"
 num = "0.2"
 indicatif = "0.13"
+anyhow = "1.0"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.3"
+
+[dev-dependencies]
+tempfile = "3"
