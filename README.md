@@ -1,6 +1,8 @@
 # Common Index File Format (CIFF)
 
 ![Rust](https://github.com/pisa-engine/ciff/workflows/Rust/badge.svg)
+![License](https://img.shields.io/github/license/pisa-engine/ciff)
+![crates.io](https://img.shields.io/crates/v/ciff)
 
 ## What is CIFF?
 
