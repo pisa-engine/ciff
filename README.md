@@ -11,11 +11,16 @@ Common Index File Format [CIFF](https://github.com/osirrc/ciff/) is an inverted 
 
 
 ## Versions
-We currently provide a Rust binary for converting CIFF data to a [PISA canonical index](https://pisa.readthedocs.io/en/latest/inverting.html#inverted-index-format).
+We currently provide a Rust binary for converting CIFF data to a [PISA canonical index](https://pisa.readthedocs.io/en/latest/inverting.html#inverted-index-format), and for converting a PISA canonical index back to CIFF. This means PISA can generate indexes that can then be consumed by other systems that support CIFF (and vice versa).
 
 
 ## Build
 
-Just run `cargo build --release` to build the binary. It can then be executed:
-`./target/release/common-index-format`
+Just run `cargo build --release` to build the binaries. 
+
+To convert a CIFF blob to a PISA canonical:
+`./target/release/ciff2pisa`
+
+To convert a PISA canonical to a CIFF blob:
+`./target/release/pisa2ciff`
 
