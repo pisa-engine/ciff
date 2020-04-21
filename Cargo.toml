@@ -1,6 +1,6 @@
 [package]
 name = "ciff"
-version = "0.1.0" # remember to update html_root_url
+version = "0.1.1" # remember to update html_root_url
 authors = ["Michal Siedlaczek <michal.siedlaczek@nyu.edu>"]
 edition = "2018"
 license = "Apache-2.0"
