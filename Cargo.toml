@@ -1,8 +1,13 @@
 [package]
 name = "ciff"
-version = "0.1.0"
+version = "0.1.0" # remember to update html_root_url
 authors = ["Michal Siedlaczek <michal.siedlaczek@nyu.edu>"]
 edition = "2018"
+license = "Apache-2.0"
+repository = "https://github.com/pisa-engine/ciff"
+readme = "README.md"
+keywords = ["ciff", "pisa"]
+documentation = "https://docs.rs/ciff"
 build = "build.rs"
 
 [[bin]]
