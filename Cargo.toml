@@ -8,6 +8,7 @@ repository = "https://github.com/pisa-engine/ciff"
 readme = "README.md"
 keywords = ["ciff", "pisa"]
 documentation = "https://docs.rs/ciff"
+description = "The inverted index exchange format as defined as part of the Open-Source IR Replicability Challenge (OSIRRC) initiative"
 build = "build.rs"
 
 [[bin]]
