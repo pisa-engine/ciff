@@ -24,3 +24,37 @@ To convert a CIFF blob to a PISA canonical:
 To convert a PISA canonical to a CIFF blob:
 `./target/release/pisa2ciff`
 
+## Install
+
+You can also install the binaries to your local `cargo` repository:
+
+```
+cargo install --path .
+```
+
+or if you are installing the same version again:
+
+```
+cargo install --path . --force
+```
+
+## Install from crates.io
+
+The library and the tools are also available in crates.io, so you can install the binaries in your local repository by running:
+
+```
+cargo install ciff
+```
+
+## Use as Cargo dependency
+
+If you are insterested in using the library components in your own Rust library, you can simply defeine it as a dependency in your `Cargo.toml` file:
+
+```toml
+[dependencies]
+ciff = "0.1"
+```
+
+## Library API documentation
+
+The API documentation is available on [docs.rs](https://docs.rs/ciff).
