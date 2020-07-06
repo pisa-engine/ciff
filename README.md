@@ -9,12 +9,35 @@
 
 Common Index File Format [CIFF](https://github.com/osirrc/ciff/) is an inverted index exchange format as defined as part of the *Open-Source IR Replicability Challenge (OSIRRC)* initiative. The primary idea is to allow indexes to be dumped from Lucene via [Anserini](https://github.com/castorini/anserini) which can then be ingested by other search engines. This repository contains the necessary code to read the CIFF into a format which PISA can use for building (and then searching) indexes.
 
-
 ## Versions
 We currently provide a Rust binary for converting CIFF data to a [PISA canonical index](https://pisa.readthedocs.io/en/latest/inverting.html#inverted-index-format), and for converting a PISA canonical index back to CIFF. This means PISA can generate indexes that can then be consumed by other systems that support CIFF (and vice versa).
 
+## Install from AUR
 
-## Build
+The package is available in [Arch User Repository](https://aur.archlinux.org/packages/ciff-pisa/).
+If you are on an Arch-based system, you can install it by running the following:
+
+```bash
+# Replace yay with the helper of your choice.
+yay -S ciff-pisa
+```
+
+## Install from crates.io
+
+> Note that the installation methods described below **are not** system-wide.
+> For example, on Linux the tools usually end up in `$HOME/.cargo/bin` directory.
+> To use tools from command line, make sure to use the absolute path or update
+> your `PATH` variable to include the `$HOME/.cargo/bin` directory.
+
+The library and the tools are also available in crates.io, so you can install the binaries in your local repository by running:
+
+```
+cargo install ciff
+```
+
+## Install from source
+
+### Build locally
 
 Just run `cargo build --release` to build the binaries. 
 
@@ -24,7 +47,7 @@ To convert a CIFF blob to a PISA canonical:
 To convert a PISA canonical to a CIFF blob:
 `./target/release/pisa2ciff`
 
-## Install
+### Install
 
 You can also install the binaries to your local `cargo` repository:
 
@@ -36,14 +59,6 @@ or if you are installing the same version again:
 
 ```
 cargo install --path . --force
-```
-
-## Install from crates.io
-
-The library and the tools are also available in crates.io, so you can install the binaries in your local repository by running:
-
-```
-cargo install ciff
 ```
 
 ## Use as Cargo dependency
