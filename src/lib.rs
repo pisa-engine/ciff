@@ -255,7 +255,7 @@ fn header(documents_bytes: &[u8], sizes_bytes: &[u8], description: &str) -> Resu
     header.set_description(description.into());
     header.set_num_postings_lists(num_postings_lists);
     header.set_total_postings_lists(num_postings_lists);
-    header.set_total_terms_in_collection(i64::from(num_postings_lists));
+    header.set_total_terms_in_collection(doclen_sum);
     header.set_num_docs(num_documents as i32);
     header.set_total_docs(num_documents as i32);
     #[allow(clippy::cast_precision_loss)]
