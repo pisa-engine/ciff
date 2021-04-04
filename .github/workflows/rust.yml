@@ -65,3 +65,25 @@ jobs:
       - run: cargo rustdoc --lib -- -D warnings
       - run: cargo rustdoc --bin pisa2ciff -- -D warnings
       - run: cargo rustdoc --bin ciff2pisa -- -D warnings
+  code-coverage:
+    name: Run code coverage
+    runs-on: ubuntu-latest
+    env:
+        RUSTFLAGS: -Zinstrument-coverage
+        LLVM_PROFILE_FILE: coverage-%p-%m.profraw
+    steps:
+      - uses: actions/checkout@v2
+      - uses: hecrj/setup-rust-action@v1
+        with:
+            rust-version: nightly
+      - run: rustup component add llvm-tools-preview
+      - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
+      - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+      - run: cargo test --verbose --workspace
+      - run: cargo run --example simulation
+      - run: mkdir ./coverage
+      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
+      - name: Coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
