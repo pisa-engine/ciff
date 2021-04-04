@@ -35,7 +35,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_display_header() -> fmt::Result {
+    fn test_display_header() {
         let header = Header {
             version: 1,
             num_postings_lists: 13,
@@ -47,7 +47,6 @@ mod test {
             description: "Test description".to_string(),
             ..Header::default()
         };
-        "----- CIFF HEADER -----";
         let formatted = format!("{}", header);
         assert_eq!(
             formatted,
@@ -62,6 +61,5 @@ Average Document Length: 12.7
 Description: Test description
 -----------------------"#
         );
-        Ok(())
     }
 }

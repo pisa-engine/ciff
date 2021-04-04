@@ -9,9 +9,8 @@ fn test_toy_index() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    match ciff_to_pisa(&input_path, &output_path) {
-        Err(error) => panic!("{}", error),
-        Ok(_) => {}
+    if let Err(err) = ciff_to_pisa(&input_path, &output_path) {
+        panic!("{}", err);
     }
     assert_eq!(
         std::fs::read_to_string(temp.path().join("coll.documents"))?,
@@ -64,9 +63,8 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    match ciff_to_pisa(&input_path, &output_path) {
-        Err(error) => panic!("{}", error),
-        Ok(_) => {}
+    if let Err(err) = ciff_to_pisa(&input_path, &output_path) {
+        panic!("{}", err);
     }
     let ciff_output_path = temp.path().join("ciff");
     pisa_to_ciff(
