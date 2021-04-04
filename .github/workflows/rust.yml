@@ -54,3 +54,14 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+  check-rustdoc-links:
+    name: Check intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: hecrj/setup-rust-action@v1
+        with:
+            rust-version: nightly
+      - run: cargo rustdoc --lib -- -D warnings
+      - run: cargo rustdoc --bin pisa2ciff -- -D warnings
+      - run: cargo rustdoc --bin ciff2pisa -- -D warnings
