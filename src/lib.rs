@@ -136,7 +136,8 @@ where
 /// Returns an error when:
 /// - an IO error occurs,
 /// - reading protobuf format fails,
-/// - data format is valid but any ID, frequency, or a count is negative.
+/// - data format is valid but any ID, frequency, or a count is negative,
+/// - document records is out of order.
 pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
     let mut ciff_reader =
         File::open(input).with_context(|| format!("Unable to open {}", input.display()))?;
@@ -201,10 +202,9 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
             )
         })?;
 
-        assert_eq!(
-            docid as usize, docs_seen,
-            "Document sizes must come in order"
-        );
+        if docid as usize != docs_seen {
+            anyhow::bail!("Document sizes must come in order");
+        }
 
         sizes.write_all(&length.to_le_bytes())?;
         writeln!(trecids, "{}", trecid)?;
