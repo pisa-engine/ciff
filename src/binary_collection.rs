@@ -103,7 +103,7 @@ fn get_next<'a>(
         .get(ELEMENT_SIZE..(ELEMENT_SIZE * (length + 1)))
         .ok_or_else(InvalidFormat::default)?;
     collection.bytes = &collection.bytes[length_bytes.len() + bytes.len()..];
-    Ok(BinarySequence { length, bytes })
+    Ok(BinarySequence { bytes, length })
 }
 
 impl<'a> Iterator for BinaryCollection<'a> {
@@ -261,6 +261,7 @@ mod test {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     #[quickcheck]
     fn biniary_sequence_get_never_crashes(bytes: Vec<u8>, indices: Vec<usize>) {
         let sequence = BinarySequence {
