@@ -182,7 +182,7 @@ unsafe fn bytes_to_u32(bytes: &[u8]) -> u32 {
     let mut value: std::mem::MaybeUninit<[u8; 4]> = std::mem::MaybeUninit::uninit();
     value
         .as_mut_ptr()
-        .copy_from_nonoverlapping(bytes.as_ptr().cast(), 4);
+        .copy_from_nonoverlapping(bytes.as_ptr().cast(), 1);
     u32::from_le_bytes(value.assume_init())
 }
 
@@ -241,5 +241,34 @@ impl<'a> Iterator for BinarySequenceIterator<'a> {
         let index = self.index;
         self.index += 1;
         self.sequence.get(index)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use quickcheck_macros::quickcheck;
+
+    #[test]
+    fn test_binary_sequence() {
+        let bytes: Vec<u8> = (0_u32..10).flat_map(|i| i.to_le_bytes().to_vec()).collect();
+        let sequence = BinarySequence {
+            bytes: &bytes,
+            length: 10,
+        };
+        for n in 0..10 {
+            assert_eq!(sequence.get(n).unwrap(), n as u32);
+        }
+    }
+
+    #[quickcheck]
+    fn biniary_sequence_get_never_crashes(bytes: Vec<u8>, indices: Vec<usize>) {
+        let sequence = BinarySequence {
+            bytes: &bytes,
+            length: bytes.len() / 4,
+        };
+        for idx in indices {
+            let _ = sequence.get(idx);
+        }
     }
 }
