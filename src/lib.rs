@@ -264,10 +264,10 @@ fn header(documents_bytes: &[u8], sizes_bytes: &[u8], description: &str) -> Resu
     Ok(header)
 }
 
-fn sizes(memory: &[u8]) -> Result<BinarySequence<'_>> {
-    Ok(BinaryCollection::try_from(memory)?
+fn sizes(memory: &[u8]) -> std::result::Result<BinarySequence<'_>, InvalidFormat> {
+    BinaryCollection::try_from(memory)?
         .next()
-        .ok_or_else(|| InvalidFormat::new("sizes collection is empty"))??)
+        .ok_or_else(|| InvalidFormat::new("sizes collection is empty"))?
 }
 
 fn write_sizes(sizes_mmap: &Mmap, titles_file: &File, out: &mut CodedOutputStream) -> Result<()> {
