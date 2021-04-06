@@ -264,7 +264,7 @@ fn header(documents_bytes: &[u8], sizes_bytes: &[u8], description: &str) -> Resu
     Ok(header)
 }
 
-fn sizes<'m>(memory: &'m [u8]) -> Result<BinarySequence<'m>> {
+fn sizes(memory: &[u8]) -> Result<BinarySequence<'_>> {
     Ok(BinaryCollection::try_from(memory)?
         .next()
         .ok_or_else(|| InvalidFormat::new("sizes collection is empty"))??)
