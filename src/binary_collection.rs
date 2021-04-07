@@ -103,7 +103,7 @@ fn get_next<'a>(
         .get(ELEMENT_SIZE..(ELEMENT_SIZE * (length + 1)))
         .ok_or_else(InvalidFormat::default)?;
     collection.bytes = &collection.bytes[length_bytes.len() + bytes.len()..];
-    Ok(BinarySequence { length, bytes })
+    Ok(BinarySequence { bytes, length })
 }
 
 impl<'a> Iterator for BinaryCollection<'a> {
@@ -175,6 +175,17 @@ impl<'a> TryFrom<&'a [u8]> for BinarySequence<'a> {
     }
 }
 
+/// # Safety
+///
+/// The length of `bytes` must be 4.
+unsafe fn bytes_to_u32(bytes: &[u8]) -> u32 {
+    let mut value: std::mem::MaybeUninit<[u8; 4]> = std::mem::MaybeUninit::uninit();
+    value
+        .as_mut_ptr()
+        .copy_from_nonoverlapping(bytes.as_ptr().cast(), 1);
+    u32::from_le_bytes(value.assume_init())
+}
+
 impl<'a> BinarySequence<'a> {
     /// Returns the number of elements in the sequence.
     #[must_use]
@@ -193,9 +204,10 @@ impl<'a> BinarySequence<'a> {
     pub fn get(&self, index: usize) -> Option<u32> {
         if index < self.len() {
             let offset = index * std::mem::size_of::<u32>();
-            Some(u32::from_le_bytes(
-                self.bytes[offset..offset + 4].try_into().unwrap(),
-            ))
+            self.bytes.get(offset..offset + 4).map(|bytes| {
+                // SAFETY: it is safe because if `get` returns `Some`, the slice must be of length 4.
+                unsafe { bytes_to_u32(bytes) }
+            })
         } else {
             None
         }
@@ -229,5 +241,35 @@ impl<'a> Iterator for BinarySequenceIterator<'a> {
         let index = self.index;
         self.index += 1;
         self.sequence.get(index)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use quickcheck_macros::quickcheck;
+
+    #[test]
+    fn test_binary_sequence() {
+        let bytes: Vec<u8> = (0_u32..10).flat_map(|i| i.to_le_bytes().to_vec()).collect();
+        let sequence = BinarySequence {
+            bytes: &bytes,
+            length: 10,
+        };
+        for n in 0..10 {
+            assert_eq!(sequence.get(n).unwrap(), n as u32);
+        }
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    #[quickcheck]
+    fn biniary_sequence_get_never_crashes(bytes: Vec<u8>, indices: Vec<usize>) {
+        let sequence = BinarySequence {
+            bytes: &bytes,
+            length: bytes.len() / 4,
+        };
+        for idx in indices {
+            let _ = sequence.get(idx);
+        }
     }
 }

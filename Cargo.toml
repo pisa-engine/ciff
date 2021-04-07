@@ -20,15 +20,17 @@ name = "pisa2ciff"
 path = "src/pisa2ciff.rs"
 
 [dependencies]
-protobuf = "2.14"
+protobuf = "2.22"
 structopt = "0.3"
-num = "0.2"
-indicatif = "0.13"
+num = "0.4"
+indicatif = "0.15"
 anyhow = "1.0"
 memmap = "0.7"
 
 [build-dependencies]
-protobuf-codegen-pure = "2.14"
+protobuf-codegen-pure = "2.22"
 
 [dev-dependencies]
 tempfile = "3"
+quickcheck = "1"
+quickcheck_macros = "1"

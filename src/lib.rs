@@ -136,7 +136,8 @@ where
 /// Returns an error when:
 /// - an IO error occurs,
 /// - reading protobuf format fails,
-/// - data format is valid but any ID, frequency, or a count is negative.
+/// - data format is valid but any ID, frequency, or a count is negative,
+/// - document records is out of order.
 pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
     let mut ciff_reader =
         File::open(input).with_context(|| format!("Unable to open {}", input.display()))?;
@@ -201,10 +202,9 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
             )
         })?;
 
-        assert_eq!(
-            docid as usize, docs_seen,
-            "Document sizes must come in order"
-        );
+        if docid as usize != docs_seen {
+            anyhow::bail!("Document sizes must come in order");
+        }
 
         sizes.write_all(&length.to_le_bytes())?;
         writeln!(trecids, "{}", trecid)?;
@@ -245,10 +245,11 @@ fn header(documents_bytes: &[u8], sizes_bytes: &[u8], description: &str) -> Resu
     eprintln!("Computing average document length");
     let progress = ProgressBar::new(u64::from(num_documents));
     progress.set_style(pb_style());
-    let sizes = BinaryCollection::try_from(sizes_bytes)?
-        .next()
-        .ok_or_else(|| InvalidFormat::new("Unable to read sizes"))??;
-    let doclen_sum: i64 = sizes.iter().map(i64::from).progress_with(progress).sum();
+    let doclen_sum: i64 = sizes(sizes_bytes)?
+        .iter()
+        .map(i64::from)
+        .progress_with(progress)
+        .sum();
 
     let mut header = Header::default();
     header.set_version(1);
@@ -263,12 +264,15 @@ fn header(documents_bytes: &[u8], sizes_bytes: &[u8], description: &str) -> Resu
     Ok(header)
 }
 
+fn sizes(memory: &[u8]) -> std::result::Result<BinarySequence<'_>, InvalidFormat> {
+    BinaryCollection::try_from(memory)?
+        .next()
+        .ok_or_else(|| InvalidFormat::new("sizes collection is empty"))?
+}
+
 fn write_sizes(sizes_mmap: &Mmap, titles_file: &File, out: &mut CodedOutputStream) -> Result<()> {
     let titles = BufReader::new(titles_file);
-    let sizes = BinaryCollection::try_from(&sizes_mmap[..])?
-        .next()
-        .ok_or_else(|| InvalidFormat::new("Unable to read sizes"))??;
-    for ((docid, size), title) in sizes.iter().enumerate().zip(titles.lines()) {
+    for ((docid, size), title) in sizes(sizes_mmap)?.iter().enumerate().zip(titles.lines()) {
         let mut document = DocRecord::default();
         document.set_docid(docid as i32);
         document.set_collection_docid(title?);
@@ -376,4 +380,37 @@ fn pisa_to_ciff_from_paths(
     out.flush()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_size_sequence() {
+        let empty_memory = Vec::<u8>::new();
+        let sizes = super::sizes(&empty_memory);
+        assert!(sizes.is_err());
+        assert_eq!(
+            "Invalid binary collection format: sizes collection is empty",
+            &format!("{}", sizes.err().unwrap())
+        );
+
+        let valid_memory: Vec<u8> = [
+            5_u32.to_le_bytes(),
+            1_u32.to_le_bytes(),
+            2_u32.to_le_bytes(),
+            3_u32.to_le_bytes(),
+            4_u32.to_le_bytes(),
+            5_u32.to_le_bytes(),
+        ]
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+        let sizes = super::sizes(&valid_memory);
+        assert!(sizes.is_ok());
+        assert_eq!(
+            sizes.unwrap().iter().collect::<Vec<u32>>(),
+            vec![1_u32, 2, 3, 4, 5]
+        );
+    }
 }
