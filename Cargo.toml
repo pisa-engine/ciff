@@ -22,7 +22,7 @@ path = "src/pisa2ciff.rs"
 [dependencies]
 protobuf = "2.22"
 structopt = "0.3"
-num = "0.4"
+num-traits = "0"
 indicatif = "0.15"
 anyhow = "1.0"
 memmap = "0.7"
