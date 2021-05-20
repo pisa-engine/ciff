@@ -1,0 +1,24 @@
+[package]
+name = "pyciff"
+version = "0.1.1"
+authors = ["Michal Siedlaczek <siedlaczek@pm.me>"]
+edition = "2018"
+
+[lib]
+name = "pyciff"
+crate-type = ["cdylib"]
+
+[dependencies]
+ciff = { path = "../ciff" }
+pyo3 = { version = "0.13", features = ["extension-module"] }
+
+[package.metadata.maturin]
+classifier=[
+    "License :: OSI Approved :: Apache-2.0",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Rust",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS :: MacOS X",
+]

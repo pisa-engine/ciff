@@ -166,7 +166,7 @@ where
     Ok(())
 }
 
-/// Converts a CIFF index stored in `path` to a PISA "binary collection" (uncompressed inverted
+/// Converts a CIFF index stored in `input` to a PISA "binary collection" (uncompressed inverted
 /// index) with a basename `output`.
 ///
 /// # Errors
@@ -353,7 +353,7 @@ fn write_postings(
     Ok(())
 }
 
-/// Converts a a PISA "binary collection" (uncompressed inverted index) with a basename `input`
+/// Converts a PISA "binary collection" (uncompressed inverted index) with a basename `input`
 /// to a CIFF index stored in `output`.
 ///
 /// # Errors
