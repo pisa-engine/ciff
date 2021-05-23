@@ -71,9 +71,6 @@ jobs:
   code-coverage:
     name: Run code coverage
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ciff
     env:
         RUSTFLAGS: -Zinstrument-coverage
         LLVM_PROFILE_FILE: coverage-%p-%m.profraw
@@ -85,9 +82,9 @@ jobs:
       - run: rustup component add llvm-tools-preview
       - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
       - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-      - run: cargo test --verbose
+      - run: cargo test --verbose --workspace ciff
       - run: mkdir ./coverage
-      - run: ./grcov . --binary-path ../target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
+      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
