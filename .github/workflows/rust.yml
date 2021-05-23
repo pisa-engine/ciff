@@ -57,6 +57,9 @@ jobs:
   check-rustdoc-links:
     name: Check intra-doc links
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ciff
     steps:
       - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
@@ -68,6 +71,9 @@ jobs:
   code-coverage:
     name: Run code coverage
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ciff
     env:
         RUSTFLAGS: -Zinstrument-coverage
         LLVM_PROFILE_FILE: coverage-%p-%m.profraw
