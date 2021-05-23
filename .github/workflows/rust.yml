@@ -87,7 +87,7 @@ jobs:
       - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
       - run: cargo test --verbose
       - run: mkdir ./coverage
-      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
+      - run: ./grcov . --binary-path ../target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
