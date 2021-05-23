@@ -85,7 +85,7 @@ jobs:
       - run: rustup component add llvm-tools-preview
       - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
       - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-      - run: cargo test --verbose --workspace
+      - run: cargo test --verbose
       - run: mkdir ./coverage
       - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
       - name: Coveralls
@@ -107,3 +107,27 @@ jobs:
           rustup default "nightly-$MIRI_NIGHTLY"
           rustup component add miri
           cargo miri test --lib
+  pyciff:
+    name: "Test pyciff bindings ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    defaults:
+      run:
+        working-directory: pyciff
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade virtualenv tox tox-gh-actions
+      - name: Test with tox
+        run: tox
