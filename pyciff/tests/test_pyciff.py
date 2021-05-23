@@ -14,17 +14,17 @@ def test_ciff_to_pisa_and_back(tmpdir):
         "test_data",
         "toy-complete-20200309.ciff",
     )
-    ciff_to_pisa(ciff_path, str(pisa_path))
+    ciff_to_pisa(ciff_path, pisa_path)
     ciff2_path = tmpdir.join("ciff2")
     pisa_to_ciff(
-        str(pisa_path),
+        pisa_path,
         str(pisa_path) + ".terms",
         str(pisa_path) + ".documents",
-        str(ciff2_path),
+        ciff2_path,
         "Description",
     )
     pisa2_path = tmpdir.join("pisa2")
-    ciff_to_pisa(str(ciff2_path), str(pisa2_path))
+    ciff_to_pisa(ciff2_path, pisa2_path)
 
     def assert_equal(lhs, rhs, suffix):
         with open(lhs + suffix, mode="rb") as file:

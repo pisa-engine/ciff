@@ -7,14 +7,14 @@ use pyo3::wrap_pyfunction;
 /// Converts a CIFF index stored in `input_file` to a PISA "binary collection"
 /// (uncompressed inverted index) with a basename `output`.
 #[pyfunction]
-fn ciff_to_pisa(input_file: &str, output: &str) -> PyResult<()> {
+fn ciff_to_pisa_internal(input_file: &str, output: &str) -> PyResult<()> {
     ciff::ciff_to_pisa(&PathBuf::from(input_file), &PathBuf::from(output))
         .map_err(|err| PyRuntimeError::new_err(err.to_string()))
 }
 
 #[pyfunction]
 /// Converts a PISA "binary collection" (uncompressed inverted index) to a CIFF index.
-pub fn pisa_to_ciff(
+pub fn pisa_to_ciff_internal(
     collection_input: &str,
     terms_input: &str,
     titles_input: &str,
@@ -34,7 +34,7 @@ pub fn pisa_to_ciff(
 /// A Python module implemented in Rust.
 #[pymodule]
 fn pyciff(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(ciff_to_pisa, m)?)?;
-    m.add_function(wrap_pyfunction!(pisa_to_ciff, m)?)?;
+    m.add_function(wrap_pyfunction!(ciff_to_pisa_internal, m)?)?;
+    m.add_function(wrap_pyfunction!(pisa_to_ciff_internal, m)?)?;
     Ok(())
 }
