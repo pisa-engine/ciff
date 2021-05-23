@@ -82,7 +82,7 @@ jobs:
       - run: rustup component add llvm-tools-preview
       - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
       - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-      - run: cargo test --verbose --workspace ciff
+      - run: cargo test --verbose -p ciff
       - run: mkdir ./coverage
       - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
       - name: Coveralls
