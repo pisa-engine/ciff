@@ -30,10 +30,12 @@ use num_traits::ToPrimitive;
 use protobuf::{CodedInputStream, CodedOutputStream};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 mod proto;
 pub use proto::{DocRecord, Posting, PostingsList};
@@ -169,6 +171,79 @@ where
     Ok(())
 }
 
+fn check_lines_sorted<R: BufRead>(reader: R) -> io::Result<bool> {
+    let mut prev = String::from("");
+    for line in reader.lines() {
+        let line = line?;
+        if line < prev {
+            return Ok(false);
+        }
+        prev = line;
+    }
+    Ok(true)
+}
+
+struct PisaIndexPaths {
+    terms: PathBuf,
+    documents: PathBuf,
+    frequencies: PathBuf,
+    sizes: PathBuf,
+    titles: PathBuf,
+}
+
+impl PisaIndexPaths {
+    fn from_base_path(path: &Path) -> Option<Self> {
+        let file_name = path.file_name()?;
+        let parent = path.parent()?;
+        let format_name = |file: &OsStr, suffix| {
+            let mut full_name = file.to_owned();
+            full_name.push(suffix);
+            full_name
+        };
+        Some(Self {
+            terms: parent.join(format_name(file_name, ".terms")),
+            documents: parent.join(format_name(file_name, ".docs")),
+            frequencies: parent.join(format_name(file_name, ".freqs")),
+            sizes: parent.join(format_name(file_name, ".sizes")),
+            titles: parent.join(format_name(file_name, ".documents")),
+        })
+    }
+}
+
+fn reorder_postings(path: &Path, order: &[usize], skip_first: bool) -> Result<()> {
+    let temp = TempDir::new()?;
+    let tmp_path = temp.path().join("coll");
+    std::fs::rename(path, &tmp_path)?;
+    let mmap = unsafe { Mmap::map(&File::open(tmp_path)?)? };
+    let coll = RandomAccessBinaryCollection::try_from(mmap.as_ref())?;
+    let mut writer = BufWriter::new(File::create(path)?);
+    if skip_first {
+        let order: Vec<_> = std::iter::once(0)
+            .chain(order.iter().map(|&i| i + 1))
+            .collect();
+        binary_collection::reorder(&coll, &order, &mut writer)?;
+    } else {
+        binary_collection::reorder(&coll, order, &mut writer)?;
+    }
+    writer.flush()?;
+    Ok(())
+}
+
+fn reorder_pisa_index(paths: &PisaIndexPaths) -> Result<()> {
+    let terms = BufReader::new(File::open(&paths.terms)?)
+        .lines()
+        .collect::<io::Result<Vec<_>>>()?;
+    let mut order: Vec<_> = (0..terms.len()).collect();
+    order.sort_by_key(|&i| &terms[i]);
+    reorder_postings(&paths.documents, &order, true)?;
+    reorder_postings(&paths.frequencies, &order, false)?;
+    let mut term_writer = BufWriter::new(File::create(&paths.terms)?);
+    for index in order {
+        writeln!(&mut term_writer, "{}", terms[index])?;
+    }
+    Ok(())
+}
+
 /// Converts a CIFF index stored in `path` to a PISA "binary collection" (uncompressed inverted
 /// index) with a basename `output`.
 ///
@@ -180,12 +255,15 @@ where
 /// - data format is valid but any ID, frequency, or a count is negative,
 /// - document records is out of order.
 pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
+    let index_paths =
+        PisaIndexPaths::from_base_path(output).ok_or_else(|| anyhow!("invalid output path"))?;
+
     let mut ciff_reader =
         File::open(input).with_context(|| format!("Unable to open {}", input.display()))?;
     let mut input = CodedInputStream::new(&mut ciff_reader);
-    let mut documents = BufWriter::new(File::create(format!("{}.docs", output.display()))?);
-    let mut frequencies = BufWriter::new(File::create(format!("{}.freqs", output.display()))?);
-    let mut terms = BufWriter::new(File::create(format!("{}.terms", output.display()))?);
+    let mut documents = BufWriter::new(File::create(&index_paths.documents)?);
+    let mut frequencies = BufWriter::new(File::create(&index_paths.frequencies)?);
+    let mut terms = BufWriter::new(File::create(&index_paths.terms)?);
 
     let header = Header::from_stream(&mut input)?;
     println!("{}", header);
@@ -211,8 +289,8 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
     terms.flush()?;
 
     eprintln!("Processing document lengths");
-    let mut sizes = BufWriter::new(File::create(format!("{}.sizes", output.display()))?);
-    let mut trecids = BufWriter::new(File::create(format!("{}.documents", output.display()))?);
+    let mut sizes = BufWriter::new(File::create(&index_paths.sizes)?);
+    let mut trecids = BufWriter::new(File::create(&index_paths.titles)?);
 
     let progress = ProgressBar::new(u64::from(header.num_documents));
     progress.set_style(pb_style());
@@ -244,6 +322,10 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
         progress.inc(1);
     }
     progress.finish();
+
+    if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
+        reorder_pisa_index(&index_paths)?;
+    }
 
     Ok(())
 }

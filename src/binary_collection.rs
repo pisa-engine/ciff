@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
+use std::io::{self, Write};
 
 const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
 
@@ -376,6 +377,25 @@ impl<'a> Iterator for BinarySequenceIterator<'a> {
     }
 }
 
+/// Reorders a collection according to the given order.
+///
+/// The new collection will be written to `output`, such that a sequence at position `i`
+/// in `collection` will be at position `order[i]` in the new collection.
+pub fn reorder<W: Write>(
+    collection: &RandomAccessBinaryCollection<'_>,
+    order: &[usize],
+    output: &mut W,
+) -> io::Result<()> {
+    for &pos in order {
+        let sequence = collection.at(pos);
+        let length = sequence.len() as u32;
+        output.write_all(&length.to_le_bytes())?;
+        output.write_all(sequence.bytes)?;
+    }
+    output.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -506,5 +526,36 @@ mod test {
     fn test_random_access_binary_collection_out_of_bounds() {
         let coll = RandomAccessBinaryCollection::try_from(COLLECTION_BYTES.as_ref()).unwrap();
         let _ = coll.at(10);
+    }
+
+    #[test]
+    fn test_reorder_collection() {
+        let coll = RandomAccessBinaryCollection::try_from(COLLECTION_BYTES.as_ref()).unwrap();
+        let order = vec![0, 1, 4, 9, 5, 6, 7, 2, 3, 8];
+        let mut output = Vec::<u8>::new();
+        reorder(&coll, &order, &mut output).unwrap();
+        println!("{:?}", output);
+        let reordered = BinaryCollection::try_from(output.as_ref()).unwrap();
+        let sequences = reordered
+            .map(|sequence| {
+                sequence.map(|sequence| (sequence.len(), sequence.iter().collect::<Vec<_>>()))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            sequences,
+            vec![
+                (1, vec![3]),       // 0
+                (1, vec![0]),       // 1
+                (1, vec![0]),       // 4
+                (1, vec![1]),       // 9
+                (1, vec![2]),       // 5
+                (3, vec![0, 1, 2]), // 6
+                (2, vec![1, 2]),    // 7
+                (1, vec![0]),       // 2
+                (1, vec![0]),       // 3
+                (3, vec![0, 1, 2]), // 8
+            ]
+        );
     }
 }

@@ -26,11 +26,11 @@ num-traits = "0"
 indicatif = "0.15"
 anyhow = "1.0"
 memmap = "0.7"
+tempfile = "3"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.22"
 
 [dev-dependencies]
-tempfile = "3"
 quickcheck = "1"
 quickcheck_macros = "1"
