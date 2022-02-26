@@ -6,7 +6,7 @@ use std::fmt;
 const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
 
 /// Error raised when the bytes cannot be properly parsed into the collection format.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct InvalidFormat(Option<String>);
 
 impl InvalidFormat {
@@ -197,14 +197,6 @@ impl<'a> TryFrom<&'a [u8]> for RandomAccessBinaryCollection<'a> {
     }
 }
 
-impl<'a> IntoIterator for RandomAccessBinaryCollection<'a> {
-    type Item = Result<BinarySequence<'a>, InvalidFormat>;
-    type IntoIter = BinaryCollection<'a>;
-    fn into_iter(self) -> BinaryCollection<'a> {
-        self.inner
-    }
-}
-
 impl<'a> RandomAccessBinaryCollection<'a> {
     /// Returns an iterator over sequences.
     pub fn iter(&self) -> impl Iterator<Item = Result<BinarySequence<'a>, InvalidFormat>> {
@@ -221,7 +213,11 @@ impl<'a> RandomAccessBinaryCollection<'a> {
         if let Some(sequence) = self.get(index) {
             sequence
         } else {
-            panic!("out of bounds");
+            panic!(
+                "out of bounds: requested {} out of {} elements",
+                index,
+                self.len()
+            );
         }
     }
 
@@ -385,13 +381,24 @@ mod test {
     use super::*;
     use quickcheck_macros::quickcheck;
 
+    const COLLECTION_BYTES: [u8; 100] = [
+        1, 0, 0, 0, 3, 0, 0, 0, // Number of documents
+        1, 0, 0, 0, 0, 0, 0, 0, // t0
+        1, 0, 0, 0, 0, 0, 0, 0, // t1
+        1, 0, 0, 0, 0, 0, 0, 0, // t2
+        1, 0, 0, 0, 0, 0, 0, 0, // t3
+        1, 0, 0, 0, 2, 0, 0, 0, // t4
+        3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t5
+        2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t6
+        3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t7
+        1, 0, 0, 0, 1, 0, 0, 0, // t8
+    ];
+
     #[test]
     fn test_binary_sequence() {
         let bytes: Vec<u8> = (0_u32..10).flat_map(|i| i.to_le_bytes().to_vec()).collect();
-        let sequence = BinarySequence {
-            bytes: &bytes,
-            length: 10,
-        };
+        let sequence = BinarySequence::try_from(bytes.as_ref()).unwrap();
+        assert!(!sequence.is_empty());
         for n in 0..10 {
             assert_eq!(sequence.get(n).unwrap(), n as u32);
         }
@@ -411,19 +418,7 @@ mod test {
 
     #[test]
     fn test_binary_collection() {
-        let input: Vec<u8> = vec![
-            1, 0, 0, 0, 3, 0, 0, 0, // Number of documents
-            1, 0, 0, 0, 0, 0, 0, 0, // t0
-            1, 0, 0, 0, 0, 0, 0, 0, // t1
-            1, 0, 0, 0, 0, 0, 0, 0, // t2
-            1, 0, 0, 0, 0, 0, 0, 0, // t3
-            1, 0, 0, 0, 2, 0, 0, 0, // t4
-            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t5
-            2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t6
-            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t7
-            1, 0, 0, 0, 1, 0, 0, 0, // t8
-        ];
-        let coll = BinaryCollection::try_from(input.as_ref()).unwrap();
+        let coll = BinaryCollection::try_from(COLLECTION_BYTES.as_ref()).unwrap();
         let sequences = coll
             .map(|sequence| {
                 sequence.map(|sequence| (sequence.len(), sequence.iter().collect::<Vec<_>>()))
@@ -448,20 +443,21 @@ mod test {
     }
 
     #[test]
+    fn test_binary_collection_invalid_format() {
+        let input: Vec<u8> = vec![1, 0, 0, 0, 3, 0, 0, 0, 1];
+        let coll = BinaryCollection::try_from(input.as_ref());
+        assert_eq!(
+            coll.err(),
+            Some(InvalidFormat::new(
+                "The byte-length of the collection is not divisible by the element size (4)"
+            ))
+        );
+    }
+
+    #[test]
     fn test_random_access_binary_collection() {
-        let input = vec![
-            1, 0, 0, 0, 3, 0, 0, 0, // Number of documents
-            1, 0, 0, 0, 0, 0, 0, 0, // t0
-            1, 0, 0, 0, 0, 0, 0, 0, // t1
-            1, 0, 0, 0, 0, 0, 0, 0, // t2
-            1, 0, 0, 0, 0, 0, 0, 0, // t3
-            1, 0, 0, 0, 2, 0, 0, 0, // t4
-            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t5
-            2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t6
-            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t7
-            1, 0, 0, 0, 1, 0, 0, 0, // t8
-        ];
-        let coll = RandomAccessBinaryCollection::try_from(input.as_ref()).unwrap();
+        let coll = RandomAccessBinaryCollection::try_from(COLLECTION_BYTES.as_ref()).unwrap();
+        assert!(!coll.is_empty());
         let sequences = coll
             .iter()
             .map(|sequence| {
@@ -503,5 +499,12 @@ mod test {
                 vec![1],
             ]
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_random_access_binary_collection_out_of_bounds() {
+        let coll = RandomAccessBinaryCollection::try_from(COLLECTION_BYTES.as_ref()).unwrap();
+        let _ = coll.at(10);
     }
 }
