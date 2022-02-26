@@ -78,7 +78,10 @@ jobs:
             rust-version: nightly
       - run: rustup component add llvm-tools-preview
       - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
-      - run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+      - run: echo "7817b621f62dddfadd35fb84999b441bbce72b70cd8a61a9fe8e0998ccf75898 *grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz" > checksums
+      - run: curl -sOL https://github.com/mozilla/grcov/releases/download/v0.8.6/grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
+      - run: sha256sum -c checksums --ignore-missing
+      - run: tar xf grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
       - run: cargo test --verbose --workspace
       - run: mkdir ./coverage
       - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
