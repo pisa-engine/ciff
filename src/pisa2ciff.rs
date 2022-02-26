@@ -41,7 +41,7 @@ fn main() {
         &args.terms,
         &args.documents,
         &args.output,
-        &args.description.unwrap_or_else(String::new),
+        &args.description.unwrap_or_default(),
     ) {
         eprintln!("ERROR: {}", error);
         std::process::exit(1);

@@ -3,20 +3,16 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 
+const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
+
 /// Error raised when the bytes cannot be properly parsed into the collection format.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InvalidFormat(Option<String>);
 
 impl InvalidFormat {
     /// Constructs an error with a message.
     pub fn new<S: Into<String>>(msg: S) -> Self {
         Self(Some(msg.into()))
-    }
-}
-
-impl Default for InvalidFormat {
-    fn default() -> Self {
-        Self(None)
     }
 }
 
@@ -72,6 +68,7 @@ impl fmt::Display for InvalidFormat {
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Debug, Clone, Copy)]
 pub struct BinaryCollection<'a> {
     bytes: &'a [u8],
 }
@@ -89,21 +86,23 @@ impl<'a> TryFrom<&'a [u8]> for BinaryCollection<'a> {
     }
 }
 
-fn get_next<'a>(
-    collection: &mut BinaryCollection<'a>,
-) -> Result<BinarySequence<'a>, InvalidFormat> {
-    const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
-    let length_bytes = collection
-        .bytes
+fn get_from(bytes: &[u8]) -> Result<BinarySequence<'_>, InvalidFormat> {
+    let length_bytes = bytes
         .get(..ELEMENT_SIZE)
         .ok_or_else(InvalidFormat::default)?;
     let length = u32::from_le_bytes(length_bytes.try_into().unwrap()) as usize;
-    let bytes = collection
-        .bytes
+    let bytes = bytes
         .get(ELEMENT_SIZE..(ELEMENT_SIZE * (length + 1)))
         .ok_or_else(InvalidFormat::default)?;
-    collection.bytes = &collection.bytes[length_bytes.len() + bytes.len()..];
     Ok(BinarySequence { bytes, length })
+}
+
+fn get_next<'a>(
+    collection: &mut BinaryCollection<'a>,
+) -> Result<BinarySequence<'a>, InvalidFormat> {
+    let sequence = get_from(collection.bytes)?;
+    collection.bytes = &collection.bytes[ELEMENT_SIZE * (sequence.len() + 1)..];
+    Ok(sequence)
 }
 
 impl<'a> Iterator for BinaryCollection<'a> {
@@ -115,6 +114,142 @@ impl<'a> Iterator for BinaryCollection<'a> {
         } else {
             Some(get_next(self))
         }
+    }
+}
+
+/// A version of [`BinaryCollection`] with random access to sequences.
+///
+/// Because the binary format underlying [`BinaryCollection`] does not
+/// support random access, implementing it requires precomputing memory
+/// offsets for the sequences, and storing them in the struct.
+/// This means [`RandomAccessBinaryCollection::try_from`] will have to
+/// perform one full pass through the entire collection to collect the
+/// offsets. Thus, use this class only if you need the random access
+/// funcionality.
+///
+/// Note that the because offsets are stored within the struct, it is
+/// not `Copy` as opposed to [`BinaryCollection`], which is simply a view
+/// over a memory buffer.
+///
+/// # Examples
+///
+/// ```
+/// # use ciff::{encode_u32_sequence, RandomAccessBinaryCollection, InvalidFormat};
+/// # use std::convert::TryFrom;
+/// # fn main() -> Result<(), anyhow::Error> {
+/// let mut buffer: Vec<u8> = Vec::new();
+/// encode_u32_sequence(&mut buffer, 3, &[1, 2, 3])?;
+/// encode_u32_sequence(&mut buffer, 1, &[4])?;
+/// encode_u32_sequence(&mut buffer, 3, &[5, 6, 7])?;
+///
+/// let mut collection = RandomAccessBinaryCollection::try_from(&buffer[..])?;
+/// assert_eq!(
+///     collection.get(0).map(|seq| seq.iter().collect::<Vec<_>>()),
+///     Some(vec![1_u32, 2, 3]),
+/// );
+/// assert_eq!(
+///     collection.at(2).iter().collect::<Vec<_>>(),
+///     vec![5_u32, 6, 7],
+/// );
+/// assert_eq!(collection.get(3), None);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ```should_panic
+/// # use ciff::{encode_u32_sequence, RandomAccessBinaryCollection, InvalidFormat};
+/// # use std::convert::TryFrom;
+/// # fn main() -> Result<(), anyhow::Error> {
+/// # let mut buffer: Vec<u8> = Vec::new();
+/// # encode_u32_sequence(&mut buffer, 3, &[1, 2, 3])?;
+/// # encode_u32_sequence(&mut buffer, 1, &[4])?;
+/// # encode_u32_sequence(&mut buffer, 3, &[5, 6, 7])?;
+/// # let mut collection = RandomAccessBinaryCollection::try_from(&buffer[..])?;
+/// collection.at(3); // out of bounds
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone)]
+pub struct RandomAccessBinaryCollection<'a> {
+    inner: BinaryCollection<'a>,
+    offsets: Vec<usize>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for RandomAccessBinaryCollection<'a> {
+    type Error = InvalidFormat;
+    fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
+        let collection = BinaryCollection::try_from(bytes)?;
+        let offsets = collection
+            .map(|sequence| sequence.map(|s| s.len()))
+            .scan(0, |offset, len| {
+                Some(len.map(|len| {
+                    let result = *offset;
+                    *offset += ELEMENT_SIZE * (len + 1);
+                    result
+                }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self {
+            inner: collection,
+            offsets,
+        })
+    }
+}
+
+impl<'a> IntoIterator for RandomAccessBinaryCollection<'a> {
+    type Item = Result<BinarySequence<'a>, InvalidFormat>;
+    type IntoIter = BinaryCollection<'a>;
+    fn into_iter(self) -> BinaryCollection<'a> {
+        self.inner
+    }
+}
+
+impl<'a> RandomAccessBinaryCollection<'a> {
+    /// Returns an iterator over sequences.
+    pub fn iter(&self) -> impl Iterator<Item = Result<BinarySequence<'a>, InvalidFormat>> {
+        self.inner
+    }
+
+    /// Returns the sequence at the given index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
+    #[must_use]
+    pub fn at(&self, index: usize) -> BinarySequence<'a> {
+        if let Some(sequence) = self.get(index) {
+            sequence
+        } else {
+            panic!("out of bounds");
+        }
+    }
+
+    /// Returns the sequence at the given index or `None` if out of bounds.
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<BinarySequence<'a>> {
+        let byte_offset = *self.offsets.get(index)?;
+        if let Ok(sequence) = get_from(self.inner.bytes.get(byte_offset..)?) {
+            Some(sequence)
+        } else {
+            // The following case should be unreachable, because when constructing
+            // the collection, we iterate through all sequences. Though there still
+            // can be an error when iterating the sequence elements, the sequence
+            // itself must be Ok.
+            unreachable!()
+        }
+    }
+
+    /// Returns the number of sequences in the collection.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.offsets.len()
+    }
+
+    /// Checks if the collection is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.offsets.len() == 0
     }
 }
 
@@ -138,6 +273,7 @@ impl<'a> Iterator for BinaryCollection<'a> {
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BinarySequence<'a> {
     /// All bytes, **excluding** the length bytes.
     bytes: &'a [u8],
@@ -271,5 +407,101 @@ mod test {
         for idx in indices {
             let _ = sequence.get(idx);
         }
+    }
+
+    #[test]
+    fn test_binary_collection() {
+        let input: Vec<u8> = vec![
+            1, 0, 0, 0, 3, 0, 0, 0, // Number of documents
+            1, 0, 0, 0, 0, 0, 0, 0, // t0
+            1, 0, 0, 0, 0, 0, 0, 0, // t1
+            1, 0, 0, 0, 0, 0, 0, 0, // t2
+            1, 0, 0, 0, 0, 0, 0, 0, // t3
+            1, 0, 0, 0, 2, 0, 0, 0, // t4
+            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t5
+            2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t6
+            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t7
+            1, 0, 0, 0, 1, 0, 0, 0, // t8
+        ];
+        let coll = BinaryCollection::try_from(input.as_ref()).unwrap();
+        let sequences = coll
+            .map(|sequence| {
+                sequence.map(|sequence| (sequence.len(), sequence.iter().collect::<Vec<_>>()))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            sequences,
+            vec![
+                (1, vec![3]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![2]),
+                (3, vec![0, 1, 2]),
+                (2, vec![1, 2]),
+                (3, vec![0, 1, 2]),
+                (1, vec![1]),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_random_access_binary_collection() {
+        let input = vec![
+            1, 0, 0, 0, 3, 0, 0, 0, // Number of documents
+            1, 0, 0, 0, 0, 0, 0, 0, // t0
+            1, 0, 0, 0, 0, 0, 0, 0, // t1
+            1, 0, 0, 0, 0, 0, 0, 0, // t2
+            1, 0, 0, 0, 0, 0, 0, 0, // t3
+            1, 0, 0, 0, 2, 0, 0, 0, // t4
+            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t5
+            2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t6
+            3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, // t7
+            1, 0, 0, 0, 1, 0, 0, 0, // t8
+        ];
+        let coll = RandomAccessBinaryCollection::try_from(input.as_ref()).unwrap();
+        let sequences = coll
+            .iter()
+            .map(|sequence| {
+                sequence.map(|sequence| (sequence.len(), sequence.iter().collect::<Vec<_>>()))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            sequences,
+            vec![
+                (1, vec![3]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![0]),
+                (1, vec![2]),
+                (3, vec![0, 1, 2]),
+                (2, vec![1, 2]),
+                (3, vec![0, 1, 2]),
+                (1, vec![1]),
+            ]
+        );
+        assert_eq!(coll.offsets, vec![0, 8, 16, 24, 32, 40, 48, 64, 76, 92]);
+        assert_eq!(coll.len(), 10);
+        assert_eq!(
+            (0..coll.len())
+                .map(|idx| coll.at(idx).iter().collect())
+                .collect::<Vec<Vec<u32>>>(),
+            vec![
+                vec![3],
+                vec![0],
+                vec![0],
+                vec![0],
+                vec![0],
+                vec![2],
+                vec![0, 1, 2],
+                vec![1, 2],
+                vec![0, 1, 2],
+                vec![1],
+            ]
+        );
     }
 }

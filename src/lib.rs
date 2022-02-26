@@ -18,7 +18,8 @@
     clippy::module_name_repetitions,
     clippy::default_trait_access,
     clippy::cast_possible_wrap,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::copy_iterator
 )]
 
 use anyhow::{anyhow, Context};
@@ -37,7 +38,9 @@ use std::path::{Path, PathBuf};
 mod proto;
 pub use proto::{DocRecord, Posting, PostingsList};
 mod binary_collection;
-pub use binary_collection::{BinaryCollection, BinarySequence, InvalidFormat};
+pub use binary_collection::{
+    BinaryCollection, BinarySequence, InvalidFormat, RandomAccessBinaryCollection,
+};
 
 type Result<T> = anyhow::Result<T>;
 
