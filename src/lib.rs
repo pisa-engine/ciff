@@ -39,10 +39,14 @@ use tempfile::TempDir;
 
 mod proto;
 pub use proto::{DocRecord, Posting, PostingsList};
+
 mod binary_collection;
 pub use binary_collection::{
     BinaryCollection, BinarySequence, InvalidFormat, RandomAccessBinaryCollection,
 };
+
+mod payload_vector;
+pub use payload_vector::{PayloadIter, PayloadSlice, PayloadVector};
 
 type Result<T> = anyhow::Result<T>;
 
