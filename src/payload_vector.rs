@@ -248,7 +248,7 @@ mod test {
         let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
             .trim()
-            .split('\n')
+            .split_whitespace()
             .map(str::to_string)
             .collect();
         let mut output = Vec::<u8>::new();
@@ -263,7 +263,7 @@ mod test {
         let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
             .trim()
-            .split('\n')
+            .split_whitespace()
             .map(str::to_string)
             .collect();
 
