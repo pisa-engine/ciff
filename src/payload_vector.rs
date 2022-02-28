@@ -244,6 +244,7 @@ mod test {
     use std::path::PathBuf;
 
     #[test]
+    #[cfg(not(miri))]
     fn test_write() -> io::Result<()> {
         let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
