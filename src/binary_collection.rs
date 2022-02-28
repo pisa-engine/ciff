@@ -126,7 +126,7 @@ impl<'a> Iterator for BinaryCollection<'a> {
 /// This means [`RandomAccessBinaryCollection::try_from`] will have to
 /// perform one full pass through the entire collection to collect the
 /// offsets. Thus, use this class only if you need the random access
-/// funcionality.
+/// functionality.
 ///
 /// Note that the because offsets are stored within the struct, it is
 /// not `Copy` as opposed to [`BinaryCollection`], which is simply a view
