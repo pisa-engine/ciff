@@ -2,7 +2,7 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::ops::{Deref, Index};
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Owning variant of [`PayloadSlice`], in which the underlying bytes are fully
 /// in memory within the struct. This is useful mainly for building the structure
@@ -251,7 +251,7 @@ impl<'a> Iterator for PayloadIter<'a> {
     }
 }
 
-pub fn build_lexicon(input: &PathBuf, output: &PathBuf) -> io::Result<()> {
+pub fn build_lexicon(input: &Path, output: &Path) -> io::Result<()> {
     let lex = BufReader::new(File::open(input)?)
         .lines()
         .collect::<Result<PayloadVector, _>>()?;
