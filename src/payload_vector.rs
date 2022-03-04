@@ -21,6 +21,12 @@ impl AsRef<[u8]> for PayloadVector {
     }
 }
 
+impl AsRef<PayloadSlice> for PayloadVector {
+    fn as_ref(&self) -> &PayloadSlice {
+        &*self
+    }
+}
+
 impl<Item> std::iter::FromIterator<Item> for PayloadVector
 where
     Item: AsRef<[u8]>,
@@ -131,6 +137,12 @@ impl<'a> Deref for PayloadVector {
 #[repr(transparent)]
 pub struct PayloadSlice {
     data: [u8],
+}
+
+impl AsRef<PayloadSlice> for PayloadSlice {
+    fn as_ref(&self) -> &PayloadSlice {
+        self
+    }
 }
 
 impl Index<usize> for &'_ PayloadSlice {
@@ -294,5 +306,34 @@ mod test {
         assert_eq!(lex.iter().collect::<Vec<_>>(), expected);
 
         Ok(())
+    }
+
+    fn assert_payloads<L: AsRef<PayloadSlice>>(lex: L, payloads: &[&[u8]]) {
+        let lex = lex.as_ref();
+        assert!(!lex.is_empty());
+        for (idx, payload) in payloads.iter().enumerate() {
+            assert_eq!(lex.get(idx as u64), Some(*payload));
+            assert_eq!(&lex[idx], *payload);
+        }
+        assert!(lex.get(6).is_none());
+        assert_eq!(lex.iter().collect::<Vec<_>>(), payloads);
+    }
+
+    #[test]
+    fn test_element_access() {
+        let payloads = vec![
+            b"aardvark".as_ref(),
+            b"cat".as_ref(),
+            b"dog".as_ref(),
+            b"gnu".as_ref(),
+            b"mouse".as_ref(),
+            b"zebra".as_ref(),
+        ];
+        let lex: PayloadVector = payloads
+            .iter()
+            .map(|&b| String::from_utf8(Vec::from(b)).unwrap())
+            .collect();
+        assert_payloads(&lex, &payloads);
+        assert_payloads(PayloadSlice::new(lex.as_ref()), &payloads);
     }
 }
