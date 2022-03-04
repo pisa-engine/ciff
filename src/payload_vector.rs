@@ -2,7 +2,7 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::ops::{Deref, Index};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Owning variant of [`PayloadSlice`], in which the underlying bytes are fully
 /// in memory within the struct. This is useful mainly for building the structure
@@ -268,7 +268,7 @@ mod test {
     #[test]
     #[cfg(not(miri))]
     fn test_write() -> io::Result<()> {
-        let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
+        let test_data_dir = Path::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
             .trim()
             .split_whitespace()
@@ -284,7 +284,7 @@ mod test {
     #[test]
     #[cfg(not(miri))]
     fn test_elements() -> io::Result<()> {
-        let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
+        let test_data_dir = Path::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
             .trim()
             .split_whitespace()
