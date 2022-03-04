@@ -1,4 +1,4 @@
-use ciff::{ciff_to_pisa, pisa_to_ciff};
+use ciff::{ciff_to_pisa, pisa_to_ciff, PayloadSlice};
 use std::fs::read;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -9,12 +9,18 @@ fn test_toy_index() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    if let Err(err) = ciff_to_pisa(&input_path, &output_path, false) {
+    if let Err(err) = ciff_to_pisa(&input_path, &output_path, true) {
         panic!("{}", err);
     }
     assert_eq!(
         std::fs::read_to_string(temp.path().join("coll.documents"))?,
         "WSJ_1\nTREC_DOC_1\nDOC222\n"
+    );
+    let bytes = std::fs::read(temp.path().join("coll.doclex"))?;
+    let actual_titles: Vec<_> = PayloadSlice::new(&bytes).iter().collect();
+    assert_eq!(
+        actual_titles,
+        vec![b"WSJ_1".as_ref(), b"TREC_DOC_1", b"DOC222"],
     );
     assert_eq!(
         std::fs::read(temp.path().join("coll.sizes"))?,
@@ -25,6 +31,22 @@ fn test_toy_index() -> anyhow::Result<()> {
             .lines()
             .collect::<Vec<_>>(),
         vec!["01", "03", "30", "content", "enough", "head", "simpl", "text", "veri"]
+    );
+    let bytes = std::fs::read(temp.path().join("coll.termlex"))?;
+    let actual_terms: Vec<_> = PayloadSlice::new(&bytes).iter().collect();
+    assert_eq!(
+        actual_terms,
+        vec![
+            b"01".as_ref(),
+            b"03",
+            b"30",
+            b"content",
+            b"enough",
+            b"head",
+            b"simpl",
+            b"text",
+            b"veri"
+        ]
     );
     assert_eq!(
         std::fs::read(temp.path().join("coll.docs"))?,
