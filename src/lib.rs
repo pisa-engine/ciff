@@ -193,6 +193,8 @@ struct PisaIndexPaths {
     frequencies: PathBuf,
     sizes: PathBuf,
     titles: PathBuf,
+    termlex: PathBuf,
+    doclex: PathBuf,
 }
 
 impl PisaIndexPaths {
@@ -210,6 +212,8 @@ impl PisaIndexPaths {
             frequencies: parent.join(format_name(file_name, ".freqs")),
             sizes: parent.join(format_name(file_name, ".sizes")),
             titles: parent.join(format_name(file_name, ".documents")),
+            termlex: parent.join(format_name(file_name, ".termlex")),
+            doclex: parent.join(format_name(file_name, ".doclex")),
         })
     }
 }
@@ -258,7 +262,7 @@ fn reorder_pisa_index(paths: &PisaIndexPaths) -> Result<()> {
 /// - reading protobuf format fails,
 /// - data format is valid but any ID, frequency, or a count is negative,
 /// - document records is out of order.
-pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
+pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Result<()> {
     let index_paths =
         PisaIndexPaths::from_base_path(output).ok_or_else(|| anyhow!("invalid output path"))?;
 
@@ -329,6 +333,29 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
 
     if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
         reorder_pisa_index(&index_paths)?;
+    }
+
+    if generate_lexicons {
+        eprintln!("Generating the document and term lexicons...");
+
+        // Need to flush the document identifiers
+        trecids.flush()?;
+
+        let termlex: PayloadVector = std::fs::read_to_string(&index_paths.terms)?
+            .trim()
+            .split('\n')
+            .map(str::to_string)
+            .collect();
+        let mut lex_path = BufWriter::new(File::create(&index_paths.termlex)?);
+        termlex.write(&mut lex_path)?;
+
+        let doclex: PayloadVector = std::fs::read_to_string(&index_paths.titles)?
+            .trim()
+            .split('\n')
+            .map(str::to_string)
+            .collect();
+        let mut lex_path = BufWriter::new(File::create(&index_paths.doclex)?);
+        doclex.write(&mut lex_path)?;
     }
 
     Ok(())

@@ -26,11 +26,13 @@ struct Args {
     ciff_file: PathBuf,
     #[structopt(short, long, help = "Output basename")]
     output: PathBuf,
+    #[structopt(short, long, help = "Generate lexicon files?")]
+    generate_lexicons: bool,
 }
 
 fn main() {
     let args = Args::from_args();
-    if let Err(error) = ciff_to_pisa(&args.ciff_file, &args.output) {
+    if let Err(error) = ciff_to_pisa(&args.ciff_file, &args.output, args.generate_lexicons) {
         eprintln!("ERROR: {}", error);
         std::process::exit(1);
     }
