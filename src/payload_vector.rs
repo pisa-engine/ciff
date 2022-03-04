@@ -1,8 +1,8 @@
 use std::convert::TryInto;
-use std::io::{self, Write, BufReader, BufWriter, BufRead};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::ops::{Deref, Index};
 use std::path::PathBuf;
-use std::fs::File;
 
 /// Owning variant of [`PayloadSlice`], in which the underlying bytes are fully
 /// in memory within the struct. This is useful mainly for building the structure
