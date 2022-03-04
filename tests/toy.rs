@@ -9,7 +9,7 @@ fn test_toy_index() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    if let Err(err) = ciff_to_pisa(&input_path, &output_path) {
+    if let Err(err) = ciff_to_pisa(&input_path, &output_path, false) {
         panic!("{}", err);
     }
     assert_eq!(
@@ -63,7 +63,7 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    if let Err(err) = ciff_to_pisa(&input_path, &output_path) {
+    if let Err(err) = ciff_to_pisa(&input_path, &output_path, false) {
         panic!("{}", err);
     }
     let ciff_output_path = temp.path().join("ciff");
@@ -81,7 +81,7 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     // back to PISA to verify.
 
     let pisa_copy = temp.path().join("copy");
-    ciff_to_pisa(&ciff_output_path, &pisa_copy)?;
+    ciff_to_pisa(&ciff_output_path, &pisa_copy, false)?;
 
     let coll_basename = output_path.display().to_string();
     let copy_basename = pisa_copy.display().to_string();
@@ -115,7 +115,7 @@ fn test_reorder_terms() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let pisa_path = temp.path().join("coll");
-    ciff_to_pisa(&input_path, &pisa_path)?;
+    ciff_to_pisa(&input_path, &pisa_path, false)?;
 
     // Rewrite the terms; later, we will check if the posting lists are in reverse order.
     std::fs::write(
@@ -137,7 +137,7 @@ fn test_reorder_terms() -> anyhow::Result<()> {
 
     // Convert back to PISA to verify list order
     let pisa_copy = temp.path().join("copy");
-    ciff_to_pisa(&ciff_output_path, &pisa_copy)?;
+    ciff_to_pisa(&ciff_output_path, &pisa_copy, false)?;
 
     assert_eq!(
         std::fs::read_to_string(temp.path().join("copy.documents"))?,
