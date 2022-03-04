@@ -304,6 +304,7 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
     progress.set_style(pb_style());
     progress.set_draw_delta(u64::from(header.num_documents) / 100);
     sizes.write_all(&header.num_documents.to_le_bytes())?;
+    sizes.flush()?;
 
     for docs_seen in 0..header.num_documents {
         let doc_record = input.read_message::<DocRecord>()?;
@@ -330,16 +331,19 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
         progress.inc(1);
     }
     progress.finish();
-
+    trecids.flush()?;
+    
     if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
         reorder_pisa_index(&index_paths)?;
     }
 
     if generate_lexicons {
         eprintln!("Generating the document and term lexicons...");
+        drop(trecids);
 
-        // Need to flush the document identifiers
-        trecids.flush()?;
+        payload_vector::build_lexicon(&index_paths.terms, &index_paths.termlex)?;
+        payload_vector::build_lexicon(&index_paths.titles, &index_paths.doclex)?;
+/*
 
         let termlex: PayloadVector = std::fs::read_to_string(&index_paths.terms)?
             .trim()
@@ -356,6 +360,7 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
             .collect();
         let mut lex_path = BufWriter::new(File::create(&index_paths.doclex)?);
         doclex.write(&mut lex_path)?;
+        */
     }
 
     Ok(())
