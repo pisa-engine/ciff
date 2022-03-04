@@ -46,7 +46,7 @@ pub use binary_collection::{
 };
 
 mod payload_vector;
-pub use payload_vector::{PayloadIter, PayloadSlice, PayloadVector};
+pub use payload_vector::{build_lexicon, PayloadIter, PayloadSlice, PayloadVector};
 
 type Result<T> = anyhow::Result<T>;
 
@@ -330,8 +330,8 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
         writeln!(trecids, "{}", trecid)?;
         progress.inc(1);
     }
-    progress.finish();
     trecids.flush()?;
+    progress.finish();
 
     if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
         reorder_pisa_index(&index_paths)?;
@@ -340,8 +340,8 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
     if generate_lexicons {
         eprintln!("Generating the document and term lexicons...");
         drop(trecids);
-        payload_vector::build_lexicon(&index_paths.terms, &index_paths.termlex)?;
-        payload_vector::build_lexicon(&index_paths.titles, &index_paths.doclex)?;
+        build_lexicon(&index_paths.terms, &index_paths.termlex)?;
+        build_lexicon(&index_paths.titles, &index_paths.doclex)?;
     }
 
     Ok(())
