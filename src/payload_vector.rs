@@ -1,6 +1,8 @@
 use std::convert::TryInto;
-use std::io::{self, Write};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::ops::{Deref, Index};
+use std::path::Path;
 
 /// Owning variant of [`PayloadSlice`], in which the underlying bytes are fully
 /// in memory within the struct. This is useful mainly for building the structure
@@ -249,25 +251,39 @@ impl<'a> Iterator for PayloadIter<'a> {
     }
 }
 
+/// Builds a lexicon using the text file at `input` and writes it to `output`.
+///
+/// # Errors
+///
+/// Returns an error if any failure occurs during reading the input
+/// or writing to the output.
+pub fn build_lexicon(input: &Path, output: &Path) -> io::Result<()> {
+    let lex = BufReader::new(File::open(input)?)
+        .lines()
+        .collect::<Result<PayloadVector, _>>()?;
+    let mut lex_path = BufWriter::new(File::create(output)?);
+    lex.write(&mut lex_path)?;
+    lex_path.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::io;
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[test]
     #[cfg(not(miri))]
     fn test_write() -> io::Result<()> {
         let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
-        let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
-            .trim()
-            .split_whitespace()
-            .map(str::to_string)
-            .collect();
-        let mut output = Vec::<u8>::new();
+        let tmp = TempDir::new()?;
+        let output = tmp.path().join("terms.lex");
+        build_lexicon(&test_data_dir.join("terms.txt"), &output)?;
+        let actual_lex_bytes = std::fs::read(output)?;
         let expected_lex_bytes = std::fs::read(test_data_dir.join("terms.lex"))?;
-        lex.write(&mut output)?;
-        assert_eq!(output, expected_lex_bytes);
+        assert_eq!(actual_lex_bytes, expected_lex_bytes);
         Ok(())
     }
 

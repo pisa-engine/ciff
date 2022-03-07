@@ -5,7 +5,7 @@
 //! For more information about PISA's internal storage formats, see the
 //! [documentation](https://pisa.readthedocs.io/en/latest/index.html).
 
-#![doc(html_root_url = "https://docs.rs/ciff/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/ciff/0.2.0")]
 #![warn(
     missing_docs,
     trivial_casts,
@@ -46,7 +46,7 @@ pub use binary_collection::{
 };
 
 mod payload_vector;
-pub use payload_vector::{PayloadIter, PayloadSlice, PayloadVector};
+pub use payload_vector::{build_lexicon, PayloadIter, PayloadSlice, PayloadVector};
 
 type Result<T> = anyhow::Result<T>;
 
@@ -193,6 +193,8 @@ struct PisaIndexPaths {
     frequencies: PathBuf,
     sizes: PathBuf,
     titles: PathBuf,
+    termlex: PathBuf,
+    doclex: PathBuf,
 }
 
 impl PisaIndexPaths {
@@ -210,6 +212,8 @@ impl PisaIndexPaths {
             frequencies: parent.join(format_name(file_name, ".freqs")),
             sizes: parent.join(format_name(file_name, ".sizes")),
             titles: parent.join(format_name(file_name, ".documents")),
+            termlex: parent.join(format_name(file_name, ".termlex")),
+            doclex: parent.join(format_name(file_name, ".doclex")),
         })
     }
 }
@@ -258,7 +262,7 @@ fn reorder_pisa_index(paths: &PisaIndexPaths) -> Result<()> {
 /// - reading protobuf format fails,
 /// - data format is valid but any ID, frequency, or a count is negative,
 /// - document records is out of order.
-pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
+pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Result<()> {
     let index_paths =
         PisaIndexPaths::from_base_path(output).ok_or_else(|| anyhow!("invalid output path"))?;
 
@@ -300,6 +304,7 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
     progress.set_style(pb_style());
     progress.set_draw_delta(u64::from(header.num_documents) / 100);
     sizes.write_all(&header.num_documents.to_le_bytes())?;
+    sizes.flush()?;
 
     for docs_seen in 0..header.num_documents {
         let doc_record = input.read_message::<DocRecord>()?;
@@ -325,10 +330,18 @@ pub fn ciff_to_pisa(input: &Path, output: &Path) -> Result<()> {
         writeln!(trecids, "{}", trecid)?;
         progress.inc(1);
     }
+    trecids.flush()?;
     progress.finish();
 
     if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
         reorder_pisa_index(&index_paths)?;
+    }
+
+    if generate_lexicons {
+        eprintln!("Generating the document and term lexicons...");
+        drop(trecids);
+        build_lexicon(&index_paths.terms, &index_paths.termlex)?;
+        build_lexicon(&index_paths.titles, &index_paths.doclex)?;
     }
 
     Ok(())
