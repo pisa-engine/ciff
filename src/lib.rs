@@ -5,7 +5,7 @@
 //! For more information about PISA's internal storage formats, see the
 //! [documentation](https://pisa.readthedocs.io/en/latest/index.html).
 
-#![doc(html_root_url = "https://docs.rs/ciff/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/ciff/0.2.1")]
 #![warn(
     missing_docs,
     trivial_casts,
