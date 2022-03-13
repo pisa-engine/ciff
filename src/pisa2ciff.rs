@@ -12,7 +12,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::default_trait_access)]
 
-use ciff::pisa_to_ciff;
+use ciff::PisaToCiff;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -36,13 +36,14 @@ struct Args {
 
 fn main() {
     let args = Args::from_args();
-    if let Err(error) = pisa_to_ciff(
-        &args.collection,
-        &args.terms,
-        &args.documents,
-        &args.output,
-        &args.description.unwrap_or_default(),
-    ) {
+    if let Err(error) = PisaToCiff::default()
+        .description(args.description.unwrap_or_default())
+        .index_paths(args.collection)
+        .terms_path(args.terms)
+        .titles_path(args.documents)
+        .output_path(args.output)
+        .convert()
+    {
         eprintln!("ERROR: {}", error);
         std::process::exit(1);
     }

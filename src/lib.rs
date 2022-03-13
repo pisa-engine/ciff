@@ -4,6 +4,34 @@
 //!
 //! For more information about PISA's internal storage formats, see the
 //! [documentation](https://pisa.readthedocs.io/en/latest/index.html).
+//!
+//! # Examples
+//!
+//! Use [`PisaToCiff`] and [`CiffToPisa`] builders to convert from one format
+//! to another.
+//!
+//! ```
+//! # use std::path::PathBuf;
+//! # use tempfile::TempDir;
+//! # use ciff::{PisaToCiff, CiffToPisa};
+//! # fn main() -> anyhow::Result<()> {
+//! # let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+//! # let ciff_file = dir.join("tests").join("test_data").join("toy-complete-20200309.ciff");
+//! # let temp = TempDir::new()?;
+//! # let pisa_base_path = temp.path().join("pisa");
+//! # let output = temp.path().join("output");
+//! CiffToPisa::default()
+//!     .input_path(ciff_file)
+//!     .output_paths(&pisa_base_path)
+//!     .convert()?;
+//! PisaToCiff::default()
+//!     .description("Hello, CIFF!")
+//!     .pisa_paths(&pisa_base_path)
+//!     .output_path(output)
+//!     .convert()?;
+//! # Ok(())
+//! # }
+//! ```
 
 #![doc(html_root_url = "https://docs.rs/ciff/0.2.1")]
 #![warn(
@@ -30,7 +58,7 @@ use num_traits::ToPrimitive;
 use protobuf::{CodedInputStream, CodedOutputStream};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
@@ -187,34 +215,54 @@ fn check_lines_sorted<R: BufRead>(reader: R) -> io::Result<bool> {
     Ok(true)
 }
 
+fn append_suffix<P, S>(path: P, suffix: S) -> OsString
+where
+    P: AsRef<OsStr>,
+    S: AsRef<OsStr>,
+{
+    let mut path = path.as_ref().to_owned();
+    path.push(suffix);
+    path
+}
+
+/// Paths to an inverted index in an uncompressed PISA format.
+#[derive(Debug, Clone, Default)]
 struct PisaIndexPaths {
-    terms: PathBuf,
     documents: PathBuf,
     frequencies: PathBuf,
     sizes: PathBuf,
-    titles: PathBuf,
-    termlex: PathBuf,
-    doclex: PathBuf,
 }
 
 impl PisaIndexPaths {
-    fn from_base_path(path: &Path) -> Option<Self> {
-        let file_name = path.file_name()?;
-        let parent = path.parent()?;
-        let format_name = |file: &OsStr, suffix| {
-            let mut full_name = file.to_owned();
-            full_name.push(suffix);
-            full_name
-        };
-        Some(Self {
-            terms: parent.join(format_name(file_name, ".terms")),
-            documents: parent.join(format_name(file_name, ".docs")),
-            frequencies: parent.join(format_name(file_name, ".freqs")),
-            sizes: parent.join(format_name(file_name, ".sizes")),
-            titles: parent.join(format_name(file_name, ".documents")),
-            termlex: parent.join(format_name(file_name, ".termlex")),
-            doclex: parent.join(format_name(file_name, ".doclex")),
-        })
+    #[must_use]
+    fn from_base_path<P: AsRef<OsStr>>(path: P) -> Self {
+        Self {
+            documents: PathBuf::from(append_suffix(path.as_ref(), ".docs")),
+            frequencies: PathBuf::from(append_suffix(path.as_ref(), ".freqs")),
+            sizes: PathBuf::from(append_suffix(path.as_ref(), ".sizes")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct PisaPaths {
+    index: PisaIndexPaths,
+    terms: PathBuf,
+    titles: PathBuf,
+    termlex: Option<PathBuf>,
+    doclex: Option<PathBuf>,
+}
+
+impl PisaPaths {
+    #[must_use]
+    fn from_base_path<P: AsRef<OsStr>>(path: P) -> Self {
+        Self {
+            index: PisaIndexPaths::from_base_path(&path),
+            terms: PathBuf::from(append_suffix(&path, ".terms")),
+            titles: PathBuf::from(append_suffix(&path, ".documents")),
+            termlex: Some(PathBuf::from(append_suffix(&path, ".termlex"))),
+            doclex: Some(PathBuf::from(append_suffix(&path, ".doclex"))),
+        }
     }
 }
 
@@ -237,19 +285,112 @@ fn reorder_postings(path: &Path, order: &[usize], skip_first: bool) -> Result<()
     Ok(())
 }
 
-fn reorder_pisa_index(paths: &PisaIndexPaths) -> Result<()> {
+fn reorder_pisa_index(paths: &PisaPaths) -> Result<()> {
     let terms = BufReader::new(File::open(&paths.terms)?)
         .lines()
         .collect::<io::Result<Vec<_>>>()?;
     let mut order: Vec<_> = (0..terms.len()).collect();
     order.sort_by_key(|&i| &terms[i]);
-    reorder_postings(&paths.documents, &order, true)?;
-    reorder_postings(&paths.frequencies, &order, false)?;
+    reorder_postings(&paths.index.documents, &order, true)?;
+    reorder_postings(&paths.index.frequencies, &order, false)?;
     let mut term_writer = BufWriter::new(File::create(&paths.terms)?);
     for index in order {
         writeln!(&mut term_writer, "{}", terms[index])?;
     }
     Ok(())
+}
+
+/// CIFF to PISA converter.
+#[derive(Debug, Default, Clone)]
+pub struct CiffToPisa {
+    input: Option<PathBuf>,
+    documents_path: Option<PathBuf>,
+    frequencies_path: Option<PathBuf>,
+    sizes_path: Option<PathBuf>,
+    terms_path: Option<PathBuf>,
+    titles_path: Option<PathBuf>,
+    termlex_path: Option<PathBuf>,
+    doclex_path: Option<PathBuf>,
+}
+
+impl CiffToPisa {
+    /// Sets the CIFF path. Required.
+    pub fn input_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.input = Some(path.into());
+        self
+    }
+
+    /// Sets PISA (uncompressed) inverted index paths. Required.
+    ///
+    /// Paths are constructed by appending file extensions to the base path:
+    ///  - `.docs` for document postings,
+    ///  - `.freqs` for frequency postings,
+    ///  - `.sizes` for document sizes,
+    ///  - `.terms` for terms text file,
+    ///  - `.documents` for document titles text file,
+    ///  - `.termlex` for term lexicon,
+    ///  - `.doclex` for document lexicon.
+    pub fn output_paths<P: AsRef<OsStr>>(&mut self, base_path: P) -> &mut Self {
+        let paths = PisaPaths::from_base_path(base_path);
+        self.documents_path = Some(paths.index.documents);
+        self.frequencies_path = Some(paths.index.frequencies);
+        self.sizes_path = Some(paths.index.sizes);
+        self.terms_path = Some(paths.terms);
+        self.titles_path = Some(paths.titles);
+        self.termlex_path = paths.termlex;
+        self.doclex_path = paths.doclex;
+        self
+    }
+
+    /// Do not construct document and term lexicons.
+    pub fn skip_lexicons(&mut self) -> &mut Self {
+        self.termlex_path = None;
+        self.doclex_path = None;
+        self
+    }
+
+    /// Builds a PISA index using the previously defined parameters.
+    ///
+    /// # Errors
+    ///
+    /// Error will be returned if:
+    ///  - some required parameters are not defined,
+    ///  - any I/O error occurs during reading input files or writing to the output file,
+    ///  - any input file is in an incorrect format.
+    pub fn convert(&self) -> Result<()> {
+        let input = self
+            .input
+            .as_ref()
+            .ok_or_else(|| anyhow!("input path undefined"))?;
+        let index_output = PisaIndexPaths {
+            documents: self
+                .documents_path
+                .clone()
+                .ok_or_else(|| anyhow!("document postings path undefined"))?,
+            frequencies: self
+                .frequencies_path
+                .clone()
+                .ok_or_else(|| anyhow!("frequency postings path undefined"))?,
+            sizes: self
+                .sizes_path
+                .clone()
+                .ok_or_else(|| anyhow!("document sizes path undefined"))?,
+        };
+        let output = PisaPaths {
+            index: index_output,
+            terms: self
+                .terms_path
+                .clone()
+                .ok_or_else(|| anyhow!("terms path undefined"))?,
+            titles: self
+                .titles_path
+                .clone()
+                .ok_or_else(|| anyhow!("terms path undefined"))?,
+            termlex: self.termlex_path.clone(),
+            doclex: self.doclex_path.clone(),
+        };
+        convert_to_pisa(input, &output)
+    }
 }
 
 /// Converts a CIFF index stored in `path` to a PISA "binary collection" (uncompressed inverted
@@ -262,16 +403,24 @@ fn reorder_pisa_index(paths: &PisaIndexPaths) -> Result<()> {
 /// - reading protobuf format fails,
 /// - data format is valid but any ID, frequency, or a count is negative,
 /// - document records is out of order.
+#[deprecated = "use CiffToPisa instead"]
 pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Result<()> {
-    let index_paths =
-        PisaIndexPaths::from_base_path(output).ok_or_else(|| anyhow!("invalid output path"))?;
+    let mut converter = CiffToPisa::default();
+    converter.input_path(input).output_paths(output);
+    if !generate_lexicons {
+        converter.skip_lexicons();
+    }
+    converter.convert()
+}
 
+fn convert_to_pisa(input: &Path, output: &PisaPaths) -> Result<()> {
+    println!("{:?}", output);
     let mut ciff_reader =
         File::open(input).with_context(|| format!("Unable to open {}", input.display()))?;
     let mut input = CodedInputStream::new(&mut ciff_reader);
-    let mut documents = BufWriter::new(File::create(&index_paths.documents)?);
-    let mut frequencies = BufWriter::new(File::create(&index_paths.frequencies)?);
-    let mut terms = BufWriter::new(File::create(&index_paths.terms)?);
+    let mut documents = BufWriter::new(File::create(&output.index.documents)?);
+    let mut frequencies = BufWriter::new(File::create(&output.index.frequencies)?);
+    let mut terms = BufWriter::new(File::create(&output.terms)?);
 
     let header = Header::from_stream(&mut input)?;
     println!("{}", header);
@@ -297,8 +446,8 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
     terms.flush()?;
 
     eprintln!("Processing document lengths");
-    let mut sizes = BufWriter::new(File::create(&index_paths.sizes)?);
-    let mut trecids = BufWriter::new(File::create(&index_paths.titles)?);
+    let mut sizes = BufWriter::new(File::create(&output.index.sizes)?);
+    let mut trecids = BufWriter::new(File::create(&output.titles)?);
 
     let progress = ProgressBar::new(u64::from(header.num_documents));
     progress.set_style(pb_style());
@@ -333,15 +482,17 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
     trecids.flush()?;
     progress.finish();
 
-    if !check_lines_sorted(BufReader::new(File::open(&index_paths.terms)?))? {
-        reorder_pisa_index(&index_paths)?;
+    if !check_lines_sorted(BufReader::new(File::open(&output.terms)?))? {
+        reorder_pisa_index(output)?;
     }
 
-    if generate_lexicons {
-        eprintln!("Generating the document and term lexicons...");
-        drop(trecids);
-        build_lexicon(&index_paths.terms, &index_paths.termlex)?;
-        build_lexicon(&index_paths.titles, &index_paths.doclex)?;
+    eprintln!("Generating the document and term lexicons...");
+    drop(trecids);
+    if let Some(termlex) = output.termlex.as_ref() {
+        build_lexicon(&output.terms, termlex)?;
+    }
+    if let Some(doclex) = output.doclex.as_ref() {
+        build_lexicon(&output.titles, doclex)?;
     }
 
     Ok(())
@@ -455,6 +606,110 @@ fn write_postings(
     Ok(())
 }
 
+/// PISA to CIFF converter.
+#[derive(Debug, Default, Clone)]
+pub struct PisaToCiff {
+    documents_path: Option<PathBuf>,
+    frequencies_path: Option<PathBuf>,
+    sizes_path: Option<PathBuf>,
+    terms_path: Option<PathBuf>,
+    titles_path: Option<PathBuf>,
+    output_path: Option<PathBuf>,
+    description: String,
+}
+
+impl PisaToCiff {
+    /// Sets CIFF index description.
+    pub fn description<S: Into<String>>(&mut self, description: S) -> &mut Self {
+        self.description = description.into();
+        self
+    }
+
+    /// Sets PISA paths. Required.
+    ///
+    /// Paths are constructed by appending file extensions to the base path:
+    ///  - `.docs` for document postings,
+    ///  - `.freqs` for frequency postings,
+    ///  - `.sizes` for document sizes,
+    ///  - `.terms` for terms text file,
+    ///  - `.documents` for document titles text file,
+    pub fn pisa_paths<P: AsRef<OsStr>>(&mut self, base_path: P) -> &mut Self {
+        let paths = PisaPaths::from_base_path(base_path);
+        self.documents_path = Some(paths.index.documents);
+        self.frequencies_path = Some(paths.index.frequencies);
+        self.sizes_path = Some(paths.index.sizes);
+        self.terms_path = Some(paths.terms);
+        self.titles_path = Some(paths.titles);
+        self
+    }
+
+    /// Sets PISA (uncompressed) inverted index paths. Required.
+    ///
+    /// Constructs paths using the given base path, appeding suffixes:
+    /// `.docs`, `.freqs`, and `.sizes`.
+    pub fn index_paths<P: AsRef<OsStr>>(&mut self, base_path: P) -> &mut Self {
+        let PisaIndexPaths {
+            documents,
+            frequencies,
+            sizes,
+        } = PisaIndexPaths::from_base_path(base_path);
+        self.documents_path = Some(documents);
+        self.frequencies_path = Some(frequencies);
+        self.sizes_path = Some(sizes);
+        self
+    }
+
+    /// Sets the path of the term file (newline-delimited text format). Required.
+    pub fn terms_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.terms_path = Some(path.into());
+        self
+    }
+
+    /// Sets the path of the document titles file (newline-delimited text format). Required.
+    pub fn titles_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.titles_path = Some(path.into());
+        self
+    }
+
+    /// Set the output file path. Required.
+    pub fn output_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.output_path = Some(path.into());
+        self
+    }
+
+    /// Builds a CIFF index using the previously defined parameters.
+    ///
+    /// # Errors
+    ///
+    /// Error will be returned if:
+    ///  - some required parameters are not defined,
+    ///  - any I/O error occurs during reading input files or writing to the output file,
+    ///  - any input file is in an incorrect format.
+    pub fn convert(&self) -> Result<()> {
+        pisa_to_ciff_from_paths(
+            self.documents_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined document postings path"))?,
+            self.frequencies_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined frequency postings path"))?,
+            self.sizes_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined document sizes path"))?,
+            self.terms_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined terms path"))?,
+            self.titles_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined titles path"))?,
+            self.output_path
+                .as_ref()
+                .ok_or_else(|| anyhow!("undefined output path"))?,
+            &self.description,
+        )
+    }
+}
+
 /// Converts a a PISA "binary collection" (uncompressed inverted index) with a basename `input`
 /// to a CIFF index stored in `output`.
 ///
@@ -463,6 +718,7 @@ fn write_postings(
 /// Returns an error when:
 /// - an IO error occurs,
 /// - writing protobuf format fails,
+#[deprecated = "use PisaToCiff instead"]
 pub fn pisa_to_ciff(
     collection_input: &Path,
     terms_input: &Path,
@@ -470,15 +726,13 @@ pub fn pisa_to_ciff(
     output: &Path,
     description: &str,
 ) -> Result<()> {
-    pisa_to_ciff_from_paths(
-        &PathBuf::from(format!("{}.docs", collection_input.display())),
-        &PathBuf::from(format!("{}.freqs", collection_input.display())),
-        &PathBuf::from(format!("{}.sizes", collection_input.display())),
-        terms_input,
-        titles_input,
-        output,
-        description,
-    )
+    PisaToCiff::default()
+        .description(description)
+        .index_paths(collection_input)
+        .terms_path(terms_input)
+        .titles_path(titles_input)
+        .output_path(output)
+        .convert()
 }
 
 fn pisa_to_ciff_from_paths(

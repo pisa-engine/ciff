@@ -12,7 +12,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::default_trait_access)]
 
-use ciff::ciff_to_pisa;
+use ciff::CiffToPisa;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -32,7 +32,14 @@ struct Args {
 
 fn main() {
     let args = Args::from_args();
-    if let Err(error) = ciff_to_pisa(&args.ciff_file, &args.output, args.generate_lexicons) {
+    let mut converter = CiffToPisa::default();
+    converter
+        .input_path(args.ciff_file)
+        .output_paths(args.output);
+    if !args.generate_lexicons {
+        converter.skip_lexicons();
+    }
+    if let Err(error) = converter.convert() {
         eprintln!("ERROR: {}", error);
         std::process::exit(1);
     }

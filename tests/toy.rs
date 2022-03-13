@@ -1,4 +1,4 @@
-use ciff::{ciff_to_pisa, pisa_to_ciff, PayloadSlice};
+use ciff::{CiffToPisa, PayloadSlice, PisaToCiff};
 use std::fs::read;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -9,9 +9,11 @@ fn test_toy_index() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    if let Err(err) = ciff_to_pisa(&input_path, &output_path, true) {
-        panic!("{}", err);
-    }
+    CiffToPisa::default()
+        .input_path(input_path)
+        .output_paths(output_path)
+        .convert()
+        .unwrap();
     assert_eq!(
         std::fs::read_to_string(temp.path().join("coll.documents"))?,
         "WSJ_1\nTREC_DOC_1\nDOC222\n"
@@ -85,17 +87,19 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let output_path = temp.path().join("coll");
-    if let Err(err) = ciff_to_pisa(&input_path, &output_path, false) {
-        panic!("{}", err);
-    }
+    // if let Err(err) = ciff_to_pisa(&input_path, &output_path, false) {
+    CiffToPisa::default()
+        .input_path(input_path)
+        .output_paths(&output_path)
+        .convert()
+        .unwrap();
     let ciff_output_path = temp.path().join("ciff");
-    pisa_to_ciff(
-        &output_path,
-        &temp.path().join("coll.terms"),
-        &temp.path().join("coll.documents"),
-        &ciff_output_path,
-        "Export of toy 3-document collection from Anserini's io.anserini.integration.TrecEndToEndTest test case",
-    )?;
+    PisaToCiff::default()
+        .index_paths(&output_path)
+        .terms_path(&temp.path().join("coll.terms"))
+        .titles_path(&temp.path().join("coll.documents"))
+        .output_path(&ciff_output_path)
+        .convert()?;
 
     // NOTE: the constructed ciff file will not be exactly the same as the initial one.
     // The reason is that PISA index will be treated as a whole index while the statistics
@@ -103,7 +107,11 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     // back to PISA to verify.
 
     let pisa_copy = temp.path().join("copy");
-    ciff_to_pisa(&ciff_output_path, &pisa_copy, false)?;
+    CiffToPisa::default()
+        .input_path(&ciff_output_path)
+        .output_paths(&pisa_copy)
+        .convert()
+        .unwrap();
 
     let coll_basename = output_path.display().to_string();
     let copy_basename = pisa_copy.display().to_string();
@@ -137,7 +145,11 @@ fn test_reorder_terms() -> anyhow::Result<()> {
     let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
     let temp = TempDir::new().unwrap();
     let pisa_path = temp.path().join("coll");
-    ciff_to_pisa(&input_path, &pisa_path, false)?;
+    CiffToPisa::default()
+        .input_path(input_path)
+        .output_paths(&pisa_path)
+        .convert()
+        .unwrap();
 
     // Rewrite the terms; later, we will check if the posting lists are in reverse order.
     std::fs::write(
@@ -149,17 +161,20 @@ fn test_reorder_terms() -> anyhow::Result<()> {
     )?;
 
     let ciff_output_path = temp.path().join("ciff");
-    pisa_to_ciff(
-        &pisa_path,
-        &temp.path().join("coll.terms"),
-        &temp.path().join("coll.documents"),
-        &ciff_output_path,
-        "",
-    )?;
+    PisaToCiff::default()
+        .index_paths(&pisa_path)
+        .terms_path(&temp.path().join("coll.terms"))
+        .titles_path(&temp.path().join("coll.documents"))
+        .output_path(&ciff_output_path)
+        .convert()?;
 
     // Convert back to PISA to verify list order
     let pisa_copy = temp.path().join("copy");
-    ciff_to_pisa(&ciff_output_path, &pisa_copy, false)?;
+    CiffToPisa::default()
+        .input_path(ciff_output_path)
+        .output_paths(pisa_copy)
+        .convert()
+        .unwrap();
 
     assert_eq!(
         std::fs::read_to_string(temp.path().join("copy.documents"))?,
