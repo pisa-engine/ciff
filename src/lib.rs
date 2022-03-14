@@ -33,7 +33,7 @@
 //! # }
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/ciff/0.2.1")]
+#![doc(html_root_url = "https://docs.rs/ciff/0.3.0")]
 #![warn(
     missing_docs,
     trivial_casts,
