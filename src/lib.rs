@@ -215,10 +215,14 @@ fn check_lines_sorted<R: BufRead>(reader: R) -> io::Result<bool> {
     Ok(true)
 }
 
-fn append_suffix<P, S>(path: P, suffix: S) -> OsString
+/// Concatenate two [`OsStr`]ings.
+///
+/// Takes two arguments that can be used as a reference to [`OsStr`], and returns
+/// a new [`OsString`] instance by concatenating them.
+pub fn concat<S1, S2>(path: S1, suffix: S2) -> OsString
 where
-    P: AsRef<OsStr>,
-    S: AsRef<OsStr>,
+    S1: AsRef<OsStr>,
+    S2: AsRef<OsStr>,
 {
     let mut path = path.as_ref().to_owned();
     path.push(suffix);
@@ -237,9 +241,9 @@ impl PisaIndexPaths {
     #[must_use]
     fn from_base_path<P: AsRef<OsStr>>(path: P) -> Self {
         Self {
-            documents: PathBuf::from(append_suffix(path.as_ref(), ".docs")),
-            frequencies: PathBuf::from(append_suffix(path.as_ref(), ".freqs")),
-            sizes: PathBuf::from(append_suffix(path.as_ref(), ".sizes")),
+            documents: PathBuf::from(concat(path.as_ref(), ".docs")),
+            frequencies: PathBuf::from(concat(path.as_ref(), ".freqs")),
+            sizes: PathBuf::from(concat(path.as_ref(), ".sizes")),
         }
     }
 }
@@ -258,10 +262,10 @@ impl PisaPaths {
     fn from_base_path<P: AsRef<OsStr>>(path: P) -> Self {
         Self {
             index: PisaIndexPaths::from_base_path(&path),
-            terms: PathBuf::from(append_suffix(&path, ".terms")),
-            titles: PathBuf::from(append_suffix(&path, ".documents")),
-            termlex: Some(PathBuf::from(append_suffix(&path, ".termlex"))),
-            doclex: Some(PathBuf::from(append_suffix(&path, ".doclex"))),
+            terms: PathBuf::from(concat(&path, ".terms")),
+            titles: PathBuf::from(concat(&path, ".documents")),
+            termlex: Some(PathBuf::from(concat(&path, ".termlex"))),
+            doclex: Some(PathBuf::from(concat(&path, ".doclex"))),
         }
     }
 }
