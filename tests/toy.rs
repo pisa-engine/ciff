@@ -285,3 +285,23 @@ fn test_legacy_api() {
 
     assert_files_eq(builder_ciff, legacy_ciff);
 }
+
+#[test]
+fn test_skip_lexicons() {
+    let input_path = PathBuf::from("tests/test_data/toy-complete-20200309.ciff");
+    let temp = TempDir::new().unwrap();
+    let output = temp.path().join("builder");
+
+    ciff_to_pisa(&input_path, &output, false).unwrap();
+    assert!(!PathBuf::from(concat(&output, ".termlex")).exists());
+    assert!(!PathBuf::from(concat(&output, ".doclex")).exists());
+
+    CiffToPisa::default()
+        .input_path(&input_path)
+        .output_paths(&output)
+        .skip_lexicons()
+        .convert()
+        .unwrap();
+    assert!(!PathBuf::from(concat(&output, ".termlex")).exists());
+    assert!(!PathBuf::from(concat(&output, ".doclex")).exists());
+}
