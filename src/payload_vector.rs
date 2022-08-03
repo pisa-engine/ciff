@@ -25,7 +25,7 @@ impl AsRef<[u8]> for PayloadVector {
 
 impl AsRef<PayloadSlice> for PayloadVector {
     fn as_ref(&self) -> &PayloadSlice {
-        &*self
+        self
     }
 }
 
@@ -60,7 +60,7 @@ where
     }
 }
 
-impl<'a> Deref for PayloadVector {
+impl Deref for PayloadVector {
     type Target = PayloadSlice;
     fn deref(&self) -> &Self::Target {
         let data: *const [u8] = &*self.data;
@@ -173,7 +173,7 @@ impl PayloadSlice {
     /// Conctructs a new slice using the given underlying data.
     #[must_use]
     pub fn new(data: &[u8]) -> &Self {
-        let data: *const [u8] = &*data;
+        let data: *const [u8] = data;
         let data = data as *const PayloadSlice;
         // SAFETY: PayloadSlice just wraps [u8],
         // and &*data is &[u8], therefore
