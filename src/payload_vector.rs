@@ -292,7 +292,6 @@ mod test {
     fn test_elements() -> io::Result<()> {
         let test_data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data");
         let lex: PayloadVector = std::fs::read_to_string(test_data_dir.join("terms.txt"))?
-            .trim()
             .split_whitespace()
             .map(str::to_string)
             .collect();
