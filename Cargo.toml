@@ -20,7 +20,7 @@ name = "pisa2ciff"
 path = "src/pisa2ciff.rs"
 
 [dependencies]
-protobuf = "2.22"
+protobuf = "^2.27"
 structopt = "0.3"
 num-traits = "0"
 indicatif = "0.15"
