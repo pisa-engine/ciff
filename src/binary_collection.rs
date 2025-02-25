@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Write};
 
-const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
+const ELEMENT_SIZE: usize = size_of::<u32>();
 
 /// Error raised when the bytes cannot be properly parsed into the collection format.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -77,7 +77,7 @@ pub struct BinaryCollection<'a> {
 impl<'a> TryFrom<&'a [u8]> for BinaryCollection<'a> {
     type Error = InvalidFormat;
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
-        if bytes.len() % std::mem::size_of::<u32>() == 0 {
+        if bytes.len() % size_of::<u32>() == 0 {
             Ok(Self { bytes })
         } else {
             Err(InvalidFormat::new(
@@ -299,8 +299,8 @@ impl<'a> TryFrom<&'a [u8]> for BinarySequence<'a> {
     /// # }
     /// ```
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
-        if bytes.len() % std::mem::size_of::<u32>() == 0 {
-            let length = bytes.len() / std::mem::size_of::<u32>();
+        if bytes.len() % size_of::<u32>() == 0 {
+            let length = bytes.len() / size_of::<u32>();
             Ok(Self { bytes, length })
         } else {
             Err(())
@@ -336,7 +336,7 @@ impl<'a> BinarySequence<'a> {
     #[must_use]
     pub fn get(&self, index: usize) -> Option<u32> {
         if index < self.len() {
-            let offset = index * std::mem::size_of::<u32>();
+            let offset = index * size_of::<u32>();
             self.bytes.get(offset..offset + 4).map(|bytes| {
                 // SAFETY: it is safe because if `get` returns `Some`, the slice must be of length 4.
                 unsafe { bytes_to_u32(bytes) }
