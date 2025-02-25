@@ -72,8 +72,8 @@ jobs:
         RUSTFLAGS: -Zinstrument-coverage
         LLVM_PROFILE_FILE: coverage-%p-%m.profraw
     steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
             rust-version: nightly
       - run: rustup component add llvm-tools-preview
