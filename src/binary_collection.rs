@@ -367,7 +367,7 @@ pub struct BinarySequenceIterator<'a> {
     index: usize,
 }
 
-impl<'a> Iterator for BinarySequenceIterator<'a> {
+impl Iterator for BinarySequenceIterator<'_> {
     type Item = u32;
 
     fn next(&mut self) -> Option<Self::Item> {
