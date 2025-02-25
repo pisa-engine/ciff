@@ -50,7 +50,7 @@ mod test {
         let formatted = format!("{header}");
         assert_eq!(
             formatted,
-            r#"----- CIFF HEADER -----
+            r"----- CIFF HEADER -----
 Version: 1
 No. Postings Lists: 13
 Total Postings Lists: 399
@@ -59,7 +59,7 @@ Total Documents: 200
 Total Terms in Collection 888
 Average Document Length: 12.7
 Description: Test description
------------------------"#
+-----------------------"
         );
     }
 }

@@ -41,13 +41,14 @@
     unused_import_braces,
     unused_qualifications
 )]
-#![warn(clippy::all, clippy::pedantic)]
+#![warn(clippy::all)]
 #![allow(
     clippy::module_name_repetitions,
     clippy::default_trait_access,
     clippy::cast_possible_wrap,
     clippy::cast_possible_truncation,
-    clippy::copy_iterator
+    clippy::copy_iterator,
+    clippy::cast_precision_loss
 )]
 
 use anyhow::{anyhow, Context};
@@ -433,7 +434,7 @@ fn convert_to_pisa(input: &Path, output: &PisaPaths) -> Result<()> {
 
     eprintln!("Processing postings");
     encode_u32_sequence(&mut documents, 1, [header.num_documents].iter())?;
-    let progress = ProgressBar::new(u64::try_from(header.num_postings_lists)?);
+    let progress = ProgressBar::new(u64::from(header.num_postings_lists));
     progress.set_style(pb_style());
     progress.set_draw_delta(10);
     for _ in 0..header.num_postings_lists {
