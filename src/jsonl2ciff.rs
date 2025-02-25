@@ -24,7 +24,7 @@ fn main() {
     converter.input_path(args.input).output_paths(args.output);
 
     if let Err(error) = converter.convert() {
-        eprintln!("ERROR: {}", error);
+        eprintln!("ERROR: {error}");
         std::process::exit(1);
     }
 }

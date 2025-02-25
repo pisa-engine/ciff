@@ -47,7 +47,7 @@ mod test {
             description: "Test description".to_string(),
             ..Header::default()
         };
-        let formatted = format!("{}", header);
+        let formatted = format!("{header}");
         assert_eq!(
             formatted,
             r#"----- CIFF HEADER -----

@@ -23,7 +23,7 @@ impl fmt::Display for InvalidFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Invalid binary collection format")?;
         if let Some(msg) = &self.0 {
-            write!(f, ": {}", msg)?;
+            write!(f, ": {msg}")?;
         }
         Ok(())
     }
@@ -534,7 +534,7 @@ mod test {
         let order = vec![0, 1, 4, 9, 5, 6, 7, 2, 3, 8];
         let mut output = Vec::<u8>::new();
         reorder(&coll, &order, &mut output).unwrap();
-        println!("{:?}", output);
+        println!("{output:?}");
         let reordered = BinaryCollection::try_from(output.as_ref()).unwrap();
         let sequences = reordered
             .map(|sequence| {

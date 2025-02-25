@@ -206,7 +206,7 @@ where
 }
 
 fn check_lines_sorted<R: BufRead>(reader: R) -> io::Result<bool> {
-    let mut prev = String::from("");
+    let mut prev = String::new();
     for line in reader.lines() {
         let line = line?;
         if line < prev {
@@ -420,7 +420,7 @@ pub fn ciff_to_pisa(input: &Path, output: &Path, generate_lexicons: bool) -> Res
 }
 
 fn convert_to_pisa(input: &Path, output: &PisaPaths) -> Result<()> {
-    println!("{:?}", output);
+    println!("{output:?}");
     let mut ciff_reader =
         File::open(input).with_context(|| format!("Unable to open {}", input.display()))?;
     let mut input = CodedInputStream::new(&mut ciff_reader);
@@ -429,7 +429,7 @@ fn convert_to_pisa(input: &Path, output: &PisaPaths) -> Result<()> {
     let mut terms = BufWriter::new(File::create(&output.terms)?);
 
     let header = Header::from_stream(&mut input)?;
-    println!("{}", header);
+    println!("{header}");
 
     eprintln!("Processing postings");
     encode_u32_sequence(&mut documents, 1, [header.num_documents].iter())?;
@@ -482,7 +482,7 @@ fn convert_to_pisa(input: &Path, output: &PisaPaths) -> Result<()> {
         }
 
         sizes.write_all(&length.to_le_bytes())?;
-        writeln!(trecids, "{}", trecid)?;
+        writeln!(trecids, "{trecid}")?;
         progress.inc(1);
     }
     trecids.flush()?;
@@ -826,7 +826,7 @@ impl JsonlToCiff {
 
         // Open the JSONL file
         let input_file =
-            File::open(input_path).with_context(|| format!("Cannot open {:?}", input_path))?;
+            File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
         let total_input_size = input_file.metadata()?.len();
 
         let reader = BufReader::new(input_file);
@@ -886,7 +886,7 @@ impl JsonlToCiff {
         pb.finish();
 
         // Sort doc_records by docid
-        doc_records.sort_by_key(|r| r.get_docid());
+        doc_records.sort_by_key(DocRecord::get_docid);
         let num_docs = doc_records.len() as i32;
 
         // Build postings (term -> PostingsList)
@@ -908,7 +908,7 @@ impl JsonlToCiff {
         header.set_total_docs(num_docs);
         header.set_total_terms_in_collection(total_terms_in_collection);
         if num_docs > 0 {
-            header.set_average_doclength(total_terms_in_collection as f64 / num_docs as f64);
+            header.set_average_doclength(total_terms_in_collection as f64 / f64::from(num_docs));
         } else {
             header.set_average_doclength(0.0);
         }
@@ -916,7 +916,7 @@ impl JsonlToCiff {
 
         // Open output CIFF file
         let output_file = File::create(output_path)
-            .with_context(|| format!("Cannot create output file {:?}", output_path))?;
+            .with_context(|| format!("Cannot create output file {output_path:?}"))?;
         let mut writer = BufWriter::new(output_file);
         let mut coded_out = CodedOutputStream::new(&mut writer);
 
@@ -934,7 +934,10 @@ impl JsonlToCiff {
             posting_pairs.sort_by_key(|(docid, _)| *docid);
 
             let df = posting_pairs.len() as i64;
-            let cf = posting_pairs.iter().map(|(_, tf)| *tf as i64).sum::<i64>();
+            let cf = posting_pairs
+                .iter()
+                .map(|(_, tf)| i64::from(*tf))
+                .sum::<i64>();
 
             let mut postings_list = PostingsList::new();
             postings_list.set_term(term);
@@ -962,8 +965,7 @@ impl JsonlToCiff {
         writer.flush()?;
 
         eprintln!(
-            "Wrote {} documents and {} postings lists to {:?}",
-            num_docs, num_postings_lists, output_path
+            "Wrote {num_docs} documents and {num_postings_lists} postings lists to {output_path:?}"
         );
 
         Ok(())

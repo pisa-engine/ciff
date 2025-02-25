@@ -44,7 +44,7 @@ fn main() {
         .output_path(args.output)
         .convert()
     {
-        eprintln!("ERROR: {}", error);
+        eprintln!("ERROR: {error}");
         std::process::exit(1);
     }
 }
