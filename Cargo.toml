@@ -19,6 +19,10 @@ path = "src/ciff2pisa.rs"
 name = "pisa2ciff"
 path = "src/pisa2ciff.rs"
 
+[[bin]]
+name = "jsonl2ciff"
+path = "src/jsonl2ciff.rs"
+
 [dependencies]
 protobuf = "^2.27"
 structopt = "0.3"
@@ -27,6 +31,8 @@ indicatif = "0.15"
 anyhow = "1.0"
 memmap = "0.7"
 tempfile = "3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.22"

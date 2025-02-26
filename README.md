@@ -47,6 +47,15 @@ To convert a CIFF blob to a PISA canonical:
 To convert a PISA canonical to a CIFF blob:
 `./target/release/pisa2ciff`
 
+To convert a Jsonl file to a CIFF blob:
+`./target/release/jsonl2ciff`
+
+Documents should have the following format. Each line should be a JSON-formatted string with the following fields:
+
+`id`: must represent the ID of the document.
+`content`: the original content of the document, as a string. This field is optional.
+`vector`: a dictionary where each key represents a token, and its corresponding value is the quantized score, e.g., {"ciff": 5}.
+
 ### Install
 
 You can also install the binaries to your local `cargo` repository:

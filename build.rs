@@ -9,7 +9,7 @@ fn main() {
     let out_dir = Path::new(&out_dir_env);
     protobuf_codegen_pure::Codegen::new()
         .out_dir(out_dir)
-        .inputs(&["proto/common-index-format-v1.proto"])
+        .inputs(["proto/common-index-format-v1.proto"])
         .include("proto")
         .run()
         .expect("Codegen failed.");
@@ -22,7 +22,7 @@ fn main() {
                 .write_all(line.as_bytes())
                 .expect("Failed to write to generated file");
             writer
-                .write_all(&[b'\n'])
+                .write_all(b"\n")
                 .expect("Failed to write to generated file");
         }
     }

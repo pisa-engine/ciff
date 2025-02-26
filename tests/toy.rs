@@ -98,8 +98,8 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     let ciff_output_path = temp.path().join("ciff");
     PisaToCiff::default()
         .index_paths(&output_path)
-        .terms_path(&temp.path().join("coll.terms"))
-        .titles_path(&temp.path().join("coll.documents"))
+        .terms_path(temp.path().join("coll.terms"))
+        .titles_path(temp.path().join("coll.documents"))
         .output_path(&ciff_output_path)
         .convert()?;
 
@@ -156,7 +156,7 @@ fn test_reorder_terms() -> anyhow::Result<()> {
     // Rewrite the terms; later, we will check if the posting lists are in reverse order.
     std::fs::write(
         temp.path().join("coll.terms"),
-        vec![
+        [
             "veri", "text", "simpl", "head", "enough", "content", "30", "03", "01",
         ]
         .join("\n"),
@@ -165,8 +165,8 @@ fn test_reorder_terms() -> anyhow::Result<()> {
     let ciff_output_path = temp.path().join("ciff");
     PisaToCiff::default()
         .index_paths(&pisa_path)
-        .terms_path(&temp.path().join("coll.terms"))
-        .titles_path(&temp.path().join("coll.documents"))
+        .terms_path(temp.path().join("coll.terms"))
+        .titles_path(temp.path().join("coll.documents"))
         .output_path(&ciff_output_path)
         .convert()?;
 

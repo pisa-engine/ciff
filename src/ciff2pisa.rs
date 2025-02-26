@@ -40,7 +40,7 @@ fn main() {
         converter.skip_lexicons();
     }
     if let Err(error) = converter.convert() {
-        eprintln!("ERROR: {}", error);
+        eprintln!("ERROR: {error}");
         std::process::exit(1);
     }
 }

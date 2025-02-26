@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Write};
 
-const ELEMENT_SIZE: usize = std::mem::size_of::<u32>();
+const ELEMENT_SIZE: usize = size_of::<u32>();
 
 /// Error raised when the bytes cannot be properly parsed into the collection format.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -23,7 +23,7 @@ impl fmt::Display for InvalidFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Invalid binary collection format")?;
         if let Some(msg) = &self.0 {
-            write!(f, ": {}", msg)?;
+            write!(f, ": {msg}")?;
         }
         Ok(())
     }
@@ -77,7 +77,7 @@ pub struct BinaryCollection<'a> {
 impl<'a> TryFrom<&'a [u8]> for BinaryCollection<'a> {
     type Error = InvalidFormat;
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
-        if bytes.len() % std::mem::size_of::<u32>() == 0 {
+        if bytes.len() % size_of::<u32>() == 0 {
             Ok(Self { bytes })
         } else {
             Err(InvalidFormat::new(
@@ -299,8 +299,8 @@ impl<'a> TryFrom<&'a [u8]> for BinarySequence<'a> {
     /// # }
     /// ```
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
-        if bytes.len() % std::mem::size_of::<u32>() == 0 {
-            let length = bytes.len() / std::mem::size_of::<u32>();
+        if bytes.len() % size_of::<u32>() == 0 {
+            let length = bytes.len() / size_of::<u32>();
             Ok(Self { bytes, length })
         } else {
             Err(())
@@ -336,7 +336,7 @@ impl<'a> BinarySequence<'a> {
     #[must_use]
     pub fn get(&self, index: usize) -> Option<u32> {
         if index < self.len() {
-            let offset = index * std::mem::size_of::<u32>();
+            let offset = index * size_of::<u32>();
             self.bytes.get(offset..offset + 4).map(|bytes| {
                 // SAFETY: it is safe because if `get` returns `Some`, the slice must be of length 4.
                 unsafe { bytes_to_u32(bytes) }
@@ -367,7 +367,7 @@ pub struct BinarySequenceIterator<'a> {
     index: usize,
 }
 
-impl<'a> Iterator for BinarySequenceIterator<'a> {
+impl Iterator for BinarySequenceIterator<'_> {
     type Item = u32;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -534,7 +534,7 @@ mod test {
         let order = vec![0, 1, 4, 9, 5, 6, 7, 2, 3, 8];
         let mut output = Vec::<u8>::new();
         reorder(&coll, &order, &mut output).unwrap();
-        println!("{:?}", output);
+        println!("{output:?}");
         let reordered = BinaryCollection::try_from(output.as_ref()).unwrap();
         let sequences = reordered
             .map(|sequence| {

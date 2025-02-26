@@ -54,7 +54,7 @@ where
         }
 
         data.extend(payloads);
-        data[..std::mem::size_of::<u64>()].copy_from_slice(&length.to_le_bytes());
+        data[..size_of::<u64>()].copy_from_slice(&length.to_le_bytes());
 
         Self { data }
     }
