@@ -848,37 +848,29 @@ impl JsonlToCiff {
         pb.set_style(pb_style());
         for line_result in reader.lines() {
             let line = line_result?;
-            let jdoc: JsonDoc = match serde_json::from_str(&line) {
-                Ok(doc) => doc,
-                Err(e) => {
-                    return Err(anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e));
-                }
-            };
-
+            let jdoc: JsonDoc = serde_json::from_str(&line)
+                .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
             if jdoc.id > max_docid {
                 max_docid = jdoc.id;
             }
 
             // Sum of tf's in this doc => doc_length
             let mut doc_length = 0i64;
-            for (term, score) in &jdoc.vector {
+            for (term, score) in jdoc.vector {
                 let tf = score.round() as i32;
                 if tf <= 0 {
                     continue; // skip zero or negative
                 }
                 doc_length += 1;
 
-                postings_map
-                    .entry(term.clone())
-                    .or_default()
-                    .push((jdoc.id, tf));
+                postings_map.entry(term).or_default().push((jdoc.id, tf));
             }
             total_terms_in_collection += doc_length;
 
             // Build a DocRecord
             let mut record = DocRecord::new();
             record.set_docid(jdoc.id);
-            record.set_collection_docid(jdoc.content.clone());
+            record.set_collection_docid(jdoc.content);
             record.set_doclength(doc_length as i32);
 
             doc_records.push(record);
