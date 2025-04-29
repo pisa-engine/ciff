@@ -777,12 +777,13 @@ fn pisa_to_ciff_from_paths(
 
 #[derive(Debug, Deserialize)]
 struct JsonDoc {
-    /// CIFF docid (must be an integer). In a typical CIFF index, this is 0..(num_docs-1).
-    id: i32,
+    /// Collection docid. CIFF will automatically assign an integer ID to this.
+    #[serde(default)]
+    id: String,
 
     /// Optional textual content for the document.
     #[serde(default)]
-    content: String,
+    _content: String,
 
     /// A dictionary from token (term) to a score (e.g., frequency). This is optional in the JSON.
     #[serde(default)]
@@ -804,7 +805,7 @@ impl JsonlToCiff {
     }
 
     /// Set the output CIFF file path. Required.
-    pub fn output_paths<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+    pub fn output_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
         self.output = Some(path.into());
         self
     }
@@ -840,6 +841,10 @@ impl JsonlToCiff {
         let mut postings_map: HashMap<String, Vec<(i32, i32)>> = HashMap::new();
 
         let mut total_terms_in_collection: i64 = 0;
+
+        // Map from a string "collection" docid to an internal integer docid.
+        let mut docid_map: HashMap<String, i32> = HashMap::new();
+        let mut current_docid: i32 = -1;
         let mut max_docid: i32 = -1;
 
         // Read JSON lines
@@ -850,8 +855,19 @@ impl JsonlToCiff {
             let line = line_result?;
             let jdoc: JsonDoc = serde_json::from_str(&line)
                 .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
-            if jdoc.id > max_docid {
-                max_docid = jdoc.id;
+
+            // map to integer docid
+            let ciff_docid = match docid_map.get(&jdoc.id) {
+                Some(&docid) => docid,
+                None => {
+                    current_docid += 1;
+                    docid_map.insert(jdoc.id.clone(), current_docid);
+                    current_docid
+                }
+            };
+
+            if ciff_docid > max_docid {
+                max_docid = ciff_docid;
             }
 
             // Sum of tf's in this doc => doc_length
@@ -863,14 +879,14 @@ impl JsonlToCiff {
                 }
                 doc_length += 1;
 
-                postings_map.entry(term).or_default().push((jdoc.id, tf));
+                postings_map.entry(term).or_default().push((ciff_docid, tf));
             }
             total_terms_in_collection += doc_length;
 
             // Build a DocRecord
             let mut record = DocRecord::new();
-            record.set_docid(jdoc.id);
-            record.set_collection_docid(jdoc.content);
+            record.set_docid(ciff_docid);
+            record.set_collection_docid(jdoc.id);
             record.set_doclength(doc_length as i32);
 
             doc_records.push(record);
@@ -937,11 +953,13 @@ impl JsonlToCiff {
             postings_list.set_df(df);
             postings_list.set_cf(cf);
 
+            let mut last_doc = 0;
             for (docid, tf) in posting_pairs {
                 let mut posting = Posting::new();
-                posting.set_docid(docid);
+                posting.set_docid(docid - last_doc);
                 posting.set_tf(tf);
                 postings_list.postings.push(posting);
+                last_doc = docid;
             }
             coded_out.write_message_no_tag(&postings_list)?;
             progress.inc(1);

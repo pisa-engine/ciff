@@ -21,7 +21,7 @@ fn main() {
     let args = Args::from_args();
 
     let mut converter = JsonlToCiff::default();
-    converter.input_path(args.input).output_paths(args.output);
+    converter.input_path(args.input).output_path(args.output);
 
     if let Err(error) = converter.convert() {
         eprintln!("ERROR: {error}");
