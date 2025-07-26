@@ -77,6 +77,7 @@ jobs:
         with:
             rust-version: nightly
       - run: rustup component add llvm-tools-preview
+      - run: rustup component add rust-src
       - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
       - run: echo "7817b621f62dddfadd35fb84999b441bbce72b70cd8a61a9fe8e0998ccf75898 *grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz" > checksums
       - run: curl -sOL https://github.com/mozilla/grcov/releases/download/v0.8.6/grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
