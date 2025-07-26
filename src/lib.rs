@@ -804,10 +804,10 @@ where
     use serde::de::Error;
     use serde_json::Value;
 
-    match Value::deserialize(deserializer).map_err(|_| Error::custom("failed to deserialize"))? {
+    match Value::deserialize(deserializer).map_err(|e| Error::custom(format!("failed to deserialize id: {}", e)))? {
         Value::String(s) => Ok(s),
         Value::Number(n) => Ok(n.to_string()),
-        _ => Err(Error::custom("id must be string or number")),
+        _ => Err(Error::custom("id must be a string or a number, but found an unsupported type")),
     }
 }
 
