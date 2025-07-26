@@ -84,6 +84,11 @@ type Result<T> = anyhow::Result<T>;
 const DEFAULT_PROGRESS_TEMPLATE: &str =
     "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {count}/{total} ({eta})";
 
+/// Minimum value for quantized scores.
+const MIN_QUANTIZED_VALUE: i32 = 1;
+/// Maximum value for quantized scores.
+const MAX_QUANTIZED_VALUE: i32 = 255;
+    
 /// Wraps [`proto::Header`] and additionally provides some important counts that are already cast
 /// to an unsigned type.
 #[derive(PartialEq, Clone, Default)]
@@ -944,8 +949,9 @@ impl JsonlToCiff {
                         0 // Will be filtered out below
                     } else {
                         let normalized = (score - min_score) / (max_score - min_score);
-                        let quantized = (normalized * 254.0 + 1.0).round() as i32;
-                        quantized.max(1).min(255)
+                        let quantization_range = MAX_QUANTIZED_VALUE - MIN_QUANTIZED_VALUE;
+                        let quantized = (normalized * quantization_range as f64 + MIN_QUANTIZED_VALUE as f64).round() as i32;
+                        quantized.clamp(MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE)
                     }
                 } else {
                     // Assume scores are already pre-quantized integers
