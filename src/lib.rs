@@ -863,16 +863,17 @@ impl JsonlToCiff {
             let reader = BufReader::new(&input_file);
             let mut min_val = f64::INFINITY;
             let mut max_val = f64::NEG_INFINITY;
-            
+
             let pb = ProgressBar::new(total_input_size);
             pb.set_style(pb_style());
             for line_result in reader.lines() {
                 let line = line_result?;
                 let jdoc: JsonDoc = serde_json::from_str(&line)
                     .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
-                
+
                 for (_, score) in jdoc.vector {
-                    if score > 0.0 {  // Only consider positive scores
+                    if score > 0.0 {
+                        // Only consider positive scores
                         min_val = min_val.min(score);
                         max_val = max_val.max(score);
                     }
@@ -880,19 +881,20 @@ impl JsonlToCiff {
                 pb.inc(line.len() as u64 + 1);
             }
             pb.finish();
-            
+
             if min_val.is_infinite() || max_val.is_infinite() {
                 return Err(anyhow!("No valid scores found for quantization"));
             }
-            
+
             eprintln!("Score range: {} to {}", min_val, max_val);
             (min_val, max_val)
         } else {
-            (0.0, 0.0)  // Not used when quantize is false
+            (0.0, 0.0) // Not used when quantize is false
         };
 
         // Reopen the file for the actual processing
-        let input_file = File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
+        let input_file =
+            File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
         let reader = BufReader::new(input_file);
 
         // We'll store doc-level info:
@@ -939,7 +941,7 @@ impl JsonlToCiff {
                     // 8-bit scalar quantization: map [min_score, max_score] to [1, 256]
                     // We use 1-256 to avoid zero values which get filtered out
                     if score <= 0.0 {
-                        0  // Will be filtered out below
+                        0 // Will be filtered out below
                     } else {
                         let normalized = (score - min_score) / (max_score - min_score);
                         let quantized = (normalized * 254.0 + 1.0).round() as i32;
@@ -949,7 +951,7 @@ impl JsonlToCiff {
                     // Assume scores are already pre-quantized integers
                     score as i32
                 };
-                
+
                 if tf <= 0 {
                     continue; // skip zero or negative
                 }
