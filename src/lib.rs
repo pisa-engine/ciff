@@ -891,7 +891,7 @@ impl JsonlToCiff {
                 return Err(anyhow!("No valid scores found for quantization"));
             }
 
-            eprintln!("Score range: {} to {}", min_val, max_val);
+            eprintln!("Score range: {min_val} to {max_val}");
             (min_val, max_val)
         } else {
             (0.0, 0.0) // Not used when quantize is false
