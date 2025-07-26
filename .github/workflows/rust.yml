@@ -69,27 +69,40 @@ jobs:
     name: Run code coverage
     runs-on: ubuntu-latest
     env:
-        RUSTFLAGS: -Zinstrument-coverage
-        LLVM_PROFILE_FILE: coverage-%p-%m.profraw
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: -Zinstrument-coverage
+      LLVM_PROFILE_FILE: coverage-%p-%m.profraw
     steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
         with:
-            rust-version: nightly
-      - run: rustup component add llvm-tools-preview
-      - run: rustup component add rust-src
-      - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
-      - run: echo "7817b621f62dddfadd35fb84999b441bbce72b70cd8a61a9fe8e0998ccf75898 *grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz" > checksums
-      - run: curl -sOL https://github.com/mozilla/grcov/releases/download/v0.8.6/grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
-      - run: sha256sum -c checksums --ignore-missing
-      - run: tar xf grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
-      - run: cargo +nightly test --verbose --workspace
-      - run: mkdir ./coverage
-      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
-      - name: Coveralls
-        uses: coverallsapp/github-action@master
+          components: llvm-tools-preview
+      - name: Install grcov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: grcov@0.8.18
+      - name: Build and test
+        run: cargo test --verbose --workspace
+      - name: Generate coverage report
+        run: |
+          mkdir coverage
+          grcov . \
+            --binary-path ./target/debug/ \
+            --source-dir . \
+            --output-type lcov \
+            --branch \
+            --ignore-not-existing \
+            --ignore "/*" \
+            --ignore "target/*" \
+            --ignore "tests/*" \
+            --ignore "src/bin/*" \
+            --output-path coverage/lcov.info
+      - name: Upload to Coveralls
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage/lcov.info
   miri:
     name: Miri test
     runs-on: ubuntu-latest
