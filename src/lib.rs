@@ -805,7 +805,7 @@ where
     use serde_json::Value;
 
     match Value::deserialize(deserializer)
-        .map_err(|e| Error::custom(format!("failed to deserialize id: {}", e)))?
+        .map_err(|e| Error::custom(format!("failed to deserialize id: {e}")))?
     {
         Value::String(s) => Ok(s),
         Value::Number(n) => Ok(n.to_string()),
