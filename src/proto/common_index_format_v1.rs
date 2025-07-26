@@ -10,5 +10,6 @@
 #![allow(unsafe_code)]
 #![allow(unused_imports)]
 #![allow(unused_results)]
-#![allow(clippy::unnecessary_parens)]
+#![allow(unnecessary_parens)]
+#![allow(unused_parens)]
 include!(concat!(env!("OUT_DIR"), "/common_index_format_v1.rs"));
