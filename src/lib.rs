@@ -778,7 +778,9 @@ fn pisa_to_ciff_from_paths(
 #[derive(Debug, Deserialize)]
 struct JsonDoc {
     /// Collection docid. CIFF will automatically assign an integer ID to this.
+    /// Can be provided as either string or integer, will be converted to string.
     #[serde(default)]
+    #[serde(deserialize_with = "deserialize_id_to_string")]
     id: String,
 
     /// Optional textual content for the document.
@@ -790,11 +792,26 @@ struct JsonDoc {
     vector: HashMap<String, f64>,
 }
 
+fn deserialize_id_to_string<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    use serde_json::Value;
+
+    match Value::deserialize(deserializer).map_err(|_| Error::custom("failed to deserialize"))? {
+        Value::String(s) => Ok(s),
+        Value::Number(n) => Ok(n.to_string()),
+        _ => Err(Error::custom("id must be string or number")),
+    }
+}
+
 /// PISA to CIFF converter.
 #[derive(Debug, Default, Clone)]
 pub struct JsonlToCiff {
     input: Option<PathBuf>,
     output: Option<PathBuf>,
+    quantize: bool,
 }
 
 impl JsonlToCiff {
@@ -807,6 +824,15 @@ impl JsonlToCiff {
     /// Set the output CIFF file path. Required.
     pub fn output_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
         self.output = Some(path.into());
+        self
+    }
+
+    /// Set whether to quantize scores to integers.
+    /// If false, scores are assumed to be already pre-quantized and are cast directly to integers.
+    /// If true, performs 8-bit scalar quantization by mapping the score range [min, max] to [1, 256].
+    /// Default is false.
+    pub fn quantize(&mut self, quantize: bool) -> &mut Self {
+        self.quantize = quantize;
         self
     }
 
@@ -831,13 +857,49 @@ impl JsonlToCiff {
             File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
         let total_input_size = input_file.metadata()?.len();
 
+        // If quantization is enabled, we need to find min/max first
+        let (min_score, max_score) = if self.quantize {
+            eprintln!("Finding score range for quantization");
+            let reader = BufReader::new(&input_file);
+            let mut min_val = f64::INFINITY;
+            let mut max_val = f64::NEG_INFINITY;
+            
+            let pb = ProgressBar::new(total_input_size);
+            pb.set_style(pb_style());
+            for line_result in reader.lines() {
+                let line = line_result?;
+                let jdoc: JsonDoc = serde_json::from_str(&line)
+                    .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
+                
+                for (_, score) in jdoc.vector {
+                    if score > 0.0 {  // Only consider positive scores
+                        min_val = min_val.min(score);
+                        max_val = max_val.max(score);
+                    }
+                }
+                pb.inc(line.len() as u64 + 1);
+            }
+            pb.finish();
+            
+            if min_val.is_infinite() || max_val.is_infinite() {
+                return Err(anyhow!("No valid scores found for quantization"));
+            }
+            
+            eprintln!("Score range: {} to {}", min_val, max_val);
+            (min_val, max_val)
+        } else {
+            (0.0, 0.0)  // Not used when quantize is false
+        };
+
+        // Reopen the file for the actual processing
+        let input_file = File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
         let reader = BufReader::new(input_file);
 
         // We'll store doc-level info:
         let mut doc_records: Vec<DocRecord> = Vec::new();
 
         // We'll map "term" -> (docid, tf).
-        // Because CIFF uses integer tf, we round any float to i32.
+        // Because CIFF uses integer tf, we convert scores to i32.
         let mut postings_map: HashMap<String, Vec<(i32, i32)>> = HashMap::new();
 
         let mut total_terms_in_collection: i64 = 0;
@@ -873,7 +935,21 @@ impl JsonlToCiff {
             // Sum of tf's in this doc => doc_length
             let mut doc_length = 0i64;
             for (term, score) in jdoc.vector {
-                let tf = score.round() as i32;
+                let tf = if self.quantize {
+                    // 8-bit scalar quantization: map [min_score, max_score] to [1, 256]
+                    // We use 1-256 to avoid zero values which get filtered out
+                    if score <= 0.0 {
+                        0  // Will be filtered out below
+                    } else {
+                        let normalized = (score - min_score) / (max_score - min_score);
+                        let quantized = (normalized * 254.0 + 1.0).round() as i32;
+                        quantized.max(1).min(255)
+                    }
+                } else {
+                    // Assume scores are already pre-quantized integers
+                    score as i32
+                };
+                
                 if tf <= 0 {
                     continue; // skip zero or negative
                 }
