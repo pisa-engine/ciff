@@ -1348,7 +1348,7 @@ mod test {
             MAX_QUANTIZED_VALUE
         );
         assert_eq!(
-            JsonlToCiff::quantize_score(3.14, 3.14, 3.14),
+            JsonlToCiff::quantize_score(std::f64::consts::PI, std::f64::consts::PI, std::f64::consts::PI),
             MAX_QUANTIZED_VALUE
         );
 
