@@ -79,4 +79,4 @@ jobs:
           rustup toolchain install "nightly-$MIRI_NIGHTLY"
           rustup default "nightly-$MIRI_NIGHTLY"
           rustup component add miri
-          cargo miri test --lib
+          cargo miri test --lib -Zmiri-disable-isolation
