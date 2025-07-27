@@ -65,30 +65,6 @@ jobs:
       - run: cargo rustdoc --lib -- -D warnings
       - run: cargo rustdoc --bin pisa2ciff -- -D warnings
       - run: cargo rustdoc --bin ciff2pisa -- -D warnings
-  code-coverage:
-    name: Run code coverage
-    runs-on: ubuntu-latest
-    env:
-        RUSTFLAGS: -Zinstrument-coverage
-        LLVM_PROFILE_FILE: coverage-%p-%m.profraw
-    steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
-        with:
-            rust-version: nightly
-      - run: rustup component add llvm-tools-preview
-      - run: echo "PATH=/home/runner/.cargo/bin:$PATH" >> $GITHUB_ENV
-      - run: echo "7817b621f62dddfadd35fb84999b441bbce72b70cd8a61a9fe8e0998ccf75898 *grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz" > checksums
-      - run: curl -sOL https://github.com/mozilla/grcov/releases/download/v0.8.6/grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
-      - run: sha256sum -c checksums --ignore-missing
-      - run: tar xf grcov-v0.8.6-x86_64-unknown-linux-gnu.tar.gz
-      - run: cargo test --verbose --workspace
-      - run: mkdir ./coverage
-      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" --ignore "build.rs" --ignore "*target*" --ignore "tests/*" --ignore "*ciff2pisa.rs" --ignore "*pisa2ciff.rs" -o ./coverage/lcov.info
-      - name: Coveralls
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
   miri:
     name: Miri test
     runs-on: ubuntu-latest
@@ -103,4 +79,4 @@ jobs:
           rustup toolchain install "nightly-$MIRI_NIGHTLY"
           rustup default "nightly-$MIRI_NIGHTLY"
           rustup component add miri
-          cargo miri test --lib
+          MIRIFLAGS="-Zmiri-disable-isolation" cargo miri test --lib 

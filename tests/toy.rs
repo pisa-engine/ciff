@@ -119,24 +119,24 @@ fn test_to_and_from_ciff() -> anyhow::Result<()> {
     let copy_basename = pisa_copy.display().to_string();
 
     assert_eq!(
-        read(format!("{}.sizes", coll_basename))?,
-        read(format!("{}.sizes", copy_basename))?
+        read(format!("{coll_basename}.sizes"))?,
+        read(format!("{copy_basename}.sizes"))?
     );
     assert_eq!(
-        read(format!("{}.terms", coll_basename))?,
-        read(format!("{}.terms", copy_basename))?
+        read(format!("{coll_basename}.terms"))?,
+        read(format!("{copy_basename}.terms"))?
     );
     assert_eq!(
-        read(format!("{}.documents", coll_basename))?,
-        read(format!("{}.documents", copy_basename))?
+        read(format!("{coll_basename}.documents"))?,
+        read(format!("{copy_basename}.documents"))?
     );
     assert_eq!(
-        read(format!("{}.docs", coll_basename))?,
-        read(format!("{}.docs", copy_basename))?
+        read(format!("{coll_basename}.docs"))?,
+        read(format!("{copy_basename}.docs"))?
     );
     assert_eq!(
-        read(format!("{}.freqs", coll_basename))?,
-        read(format!("{}.freqs", copy_basename))?
+        read(format!("{coll_basename}.freqs"))?,
+        read(format!("{copy_basename}.freqs"))?
     );
 
     Ok(())
