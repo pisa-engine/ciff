@@ -808,7 +808,13 @@ where
         .map_err(|e| Error::custom(format!("failed to deserialize id: {e}")))?
     {
         Value::String(s) => Ok(s),
-        Value::Number(n) => Ok(n.to_string()),
+        Value::Number(n) => {
+            if n.is_i64() || n.is_u64() {
+                Ok(n.to_string())
+            } else {
+                Err(Error::custom("id must be an integer"))
+            }
+        },
         _ => Err(Error::custom(
             "id must be a string or a number, but found an unsupported type",
         )),
@@ -1105,6 +1111,31 @@ mod test {
             sizes.unwrap().iter().collect::<Vec<u32>>(),
             vec![1_u32, 2, 3, 4, 5]
         );
+    }
+
+    #[test]
+    fn test_jsondoc_id_deserialization() -> Result<()> {
+        // Test string ID
+        let json_with_string_id = r#"{"id": "doc123", "vector": {"term1": 1.5}}"#;
+        let doc: JsonDoc = serde_json::from_str(json_with_string_id)?;
+        assert_eq!(doc.id, "doc123");
+
+        // Test integer ID
+        let json_with_int_id = r#"{"id": 42, "vector": {"term1": 1.5}}"#;
+        let doc: JsonDoc = serde_json::from_str(json_with_int_id)?;
+        assert_eq!(doc.id, "42");
+
+        // Test float ID (should fail)
+        let json_with_float_id = r#"{"id": 3.14, "vector": {"term1": 1.5}}"#;
+        let result: serde_json::Result<JsonDoc> = serde_json::from_str(json_with_float_id);
+        assert!(result.is_err());
+
+        // Test invalid ID type (should fail)
+        let json_with_invalid_id = r#"{"id": true, "vector": {"term1": 1.5}}"#;
+        let result: serde_json::Result<JsonDoc> = serde_json::from_str(json_with_invalid_id);
+        assert!(result.is_err());
+
+        Ok(())
     }
 
     fn header_to_buf(header: &proto::Header) -> Result<Vec<u8>> {
