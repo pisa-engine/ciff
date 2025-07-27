@@ -814,7 +814,7 @@ where
             } else {
                 Err(Error::custom("id must be an integer"))
             }
-        },
+        }
         _ => Err(Error::custom(
             "id must be a string or a number, but found an unsupported type",
         )),
@@ -851,6 +851,99 @@ impl JsonlToCiff {
         self
     }
 
+    /// Quantize a score to an 8-bit integer representation.
+    /// Maps the score range [min_score, max_score] to [MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE].
+    ///
+    /// # Arguments
+    /// * `score` - The score to quantize
+    /// * `min_score` - The minimum score in the dataset (must be > 0)
+    /// * `max_score` - The maximum score in the dataset (must be >= min_score and > 0)
+    ///
+    /// # Returns
+    /// * `0` if score <= 0 (will be filtered out)
+    /// * `MAX_QUANTIZED_VALUE` if min_score == max_score (all scores identical)
+    /// * Quantized value in range [MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE] otherwise
+    ///
+    /// # Panics
+    /// Panics if min_score <= 0 or max_score <= 0 or max_score < min_score
+    fn quantize_score(score: f64, min_score: f64, max_score: f64) -> i32 {
+        assert!(
+            min_score > 0.0,
+            "min_score must be greater than 0, got {}",
+            min_score
+        );
+        assert!(
+            max_score > 0.0,
+            "max_score must be greater than 0, got {}",
+            max_score
+        );
+        assert!(
+            max_score >= min_score,
+            "max_score ({}) must be >= min_score ({})",
+            max_score,
+            min_score
+        );
+
+        if score <= 0.0 {
+            0 // Will be filtered out
+        } else if min_score == max_score {
+            // If all scores are the same, map to max value
+            MAX_QUANTIZED_VALUE
+        } else {
+            let normalized = (score - min_score) / (max_score - min_score);
+            let quantization_range = MAX_QUANTIZED_VALUE - MIN_QUANTIZED_VALUE;
+            let quantized = (normalized * quantization_range as f64 + MIN_QUANTIZED_VALUE as f64)
+                .round() as i32;
+            quantized.clamp(MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE)
+        }
+    }
+
+    /// Find the minimum and maximum scores across all documents in a JSONL file.
+    /// Only considers positive scores (> 0.0).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The file cannot be opened or read
+    /// - No valid scores are found (all scores <= 0 or no documents)
+    /// - JSON parsing fails
+    fn find_score_range<P: AsRef<Path>>(input_path: P) -> Result<(f64, f64)> {
+        let input_file = File::open(&input_path)
+            .with_context(|| format!("Cannot open {:?}", input_path.as_ref()))?;
+        let total_input_size = input_file.metadata()?.len();
+
+        eprintln!("Finding score range for quantization");
+        let reader = BufReader::new(input_file);
+        let mut min_val = f64::INFINITY;
+        let mut max_val = f64::NEG_INFINITY;
+
+        let pb = ProgressBar::new(total_input_size);
+        pb.set_style(pb_style());
+
+        for line_result in reader.lines() {
+            let line = line_result?;
+            let jdoc: JsonDoc = serde_json::from_str(&line)
+                .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
+
+            for (_, score) in jdoc.vector {
+                if score > 0.0 {
+                    // Only consider positive scores
+                    min_val = min_val.min(score);
+                    max_val = max_val.max(score);
+                }
+            }
+            pb.inc(line.len() as u64 + 1);
+        }
+        pb.finish();
+
+        if min_val.is_infinite() || max_val.is_infinite() {
+            return Err(anyhow!("No valid scores found for quantization"));
+        }
+
+        eprintln!("Score range: {min_val} to {max_val}");
+        Ok((min_val, max_val))
+    }
+
     /// Performs the conversion from JSONL to CIFF.
     ///
     /// # Errors
@@ -867,49 +960,17 @@ impl JsonlToCiff {
             .as_ref()
             .ok_or_else(|| anyhow!("No CIFF output path was set"))?;
 
-        // Open the JSONL file
-        let input_file =
-            File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
-        let total_input_size = input_file.metadata()?.len();
-
         // If quantization is enabled, we need to find min/max first
         let (min_score, max_score) = if self.quantize {
-            eprintln!("Finding score range for quantization");
-            let reader = BufReader::new(&input_file);
-            let mut min_val = f64::INFINITY;
-            let mut max_val = f64::NEG_INFINITY;
-
-            let pb = ProgressBar::new(total_input_size);
-            pb.set_style(pb_style());
-            for line_result in reader.lines() {
-                let line = line_result?;
-                let jdoc: JsonDoc = serde_json::from_str(&line)
-                    .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
-
-                for (_, score) in jdoc.vector {
-                    if score > 0.0 {
-                        // Only consider positive scores
-                        min_val = min_val.min(score);
-                        max_val = max_val.max(score);
-                    }
-                }
-                pb.inc(line.len() as u64 + 1);
-            }
-            pb.finish();
-
-            if min_val.is_infinite() || max_val.is_infinite() {
-                return Err(anyhow!("No valid scores found for quantization"));
-            }
-
-            eprintln!("Score range: {min_val} to {max_val}");
-            (min_val, max_val)
+            Self::find_score_range(input_path)?
         } else {
             (0.0, 0.0) // Not used when quantize is false
         };
 
-        // Reopen the file for the actual processing
+        // Open the JSONL file for processing
         let input_file =
             File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
+        let total_input_size = input_file.metadata()?.len();
         let reader = BufReader::new(input_file);
 
         // We'll store doc-level info:
@@ -953,18 +1014,9 @@ impl JsonlToCiff {
             let mut doc_length = 0i64;
             for (term, score) in jdoc.vector {
                 let tf = if self.quantize {
-                    // 8-bit scalar quantization: map [min_score, max_score] to [1, 256]
-                    // We use 1-256 to avoid zero values which get filtered out
-                    if score <= 0.0 {
-                        0 // Will be filtered out below
-                    } else {
-                        let normalized = (score - min_score) / (max_score - min_score);
-                        let quantization_range = MAX_QUANTIZED_VALUE - MIN_QUANTIZED_VALUE;
-                        let quantized = (normalized * quantization_range as f64
-                            + MIN_QUANTIZED_VALUE as f64)
-                            .round() as i32;
-                        quantized.clamp(MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE)
-                    }
+                    // 8-bit scalar quantization: map [min_score, max_score] to [1, 255]
+                    // We use 1-255 to avoid zero values which get filtered out
+                    Self::quantize_score(score, min_score, max_score)
                 } else {
                     // Assume scores are already pre-quantized integers
                     score as i32
@@ -1136,6 +1188,277 @@ mod test {
         assert!(result.is_err());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_find_score_range() -> Result<()> {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Test case 1: No documents (truly empty file) - should fail
+        {
+            let temp_file = NamedTempFile::new()?;
+            // Don't write anything, keep it truly empty
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_err());
+        }
+
+        // Test case 2: Documents with only empty vectors - should fail
+        {
+            let mut temp_file = NamedTempFile::new()?;
+            writeln!(temp_file, r#"{{"id": 0, "vector": {{}}}}"#)?;
+            writeln!(temp_file, r#"{{"id": 1, "vector": {{}}}}"#)?;
+            temp_file.flush()?;
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_err());
+        }
+
+        // Test case 3: Only vectors with scores <= 0 - should fail
+        {
+            let mut temp_file = NamedTempFile::new()?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 0, "vector": {{"a": 0.0, "b": -1.0}}}}"#
+            )?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 1, "vector": {{"c": -0.001, "d": -777}}}}"#
+            )?;
+            temp_file.flush()?;
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_err());
+        }
+
+        // Test case 4: Some scores > 0 - should succeed
+        {
+            let mut temp_file = NamedTempFile::new()?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 0, "vector": {{"a": 0.0, "b": 1.0}}}}"#
+            )?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 1, "vector": {{"c": 0.001, "d": -777}}}}"#
+            )?;
+            temp_file.flush()?;
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_ok());
+            let (min_score, max_score) = result.unwrap();
+            assert_eq!(min_score, 0.001);
+            assert_eq!(max_score, 1.0);
+        }
+
+        // Test case 5: Mixed positive and negative scores
+        {
+            let mut temp_file = NamedTempFile::new()?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 0, "vector": {{"a": -5.0, "b": 2.5, "c": 0.1}}}}"#
+            )?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 1, "vector": {{"d": 10.0, "e": -1.0, "f": 7.3}}}}"#
+            )?;
+            temp_file.flush()?;
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_ok());
+            let (min_score, max_score) = result.unwrap();
+            assert_eq!(min_score, 0.1);
+            assert_eq!(max_score, 10.0);
+        }
+
+        // Test case 6: All positive scores are identical (min == max)
+        {
+            let mut temp_file = NamedTempFile::new()?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 0, "vector": {{"a": 0.0, "b": 5.0, "c": -1.0}}}}"#
+            )?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 1, "vector": {{"d": 5.0, "e": -2.0, "f": 0.0}}}}"#
+            )?;
+            writeln!(
+                temp_file,
+                r#"{{"id": 2, "vector": {{"g": 5.0, "h": -10.0}}}}"#
+            )?;
+            temp_file.flush()?;
+
+            let result = JsonlToCiff::find_score_range(temp_file.path());
+            assert!(result.is_ok());
+            let (min_score, max_score) = result.unwrap();
+            assert_eq!(min_score, 5.0);
+            assert_eq!(max_score, 5.0);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_quantization_with_identical_scores() -> Result<()> {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create a JSONL file with identical positive scores
+        let mut temp_input = NamedTempFile::new()?;
+        writeln!(
+            temp_input,
+            r#"{{"id": "doc1", "vector": {{"term1": 3.14, "term2": -1.0}}}}"#
+        )?;
+        writeln!(
+            temp_input,
+            r#"{{"id": "doc2", "vector": {{"term3": 3.14, "term4": 0.0}}}}"#
+        )?;
+        temp_input.flush()?;
+
+        let temp_output = NamedTempFile::new()?;
+
+        // Test with quantization enabled
+        let mut converter = JsonlToCiff::default();
+        converter
+            .input_path(temp_input.path())
+            .output_path(temp_output.path())
+            .quantize(true);
+
+        // This should succeed and handle the min == max case correctly
+        let result = converter.convert();
+        assert!(
+            result.is_ok(),
+            "Conversion should succeed with identical scores: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_quantize_score() {
+        // Test case 1: Negative scores should return 0
+        assert_eq!(JsonlToCiff::quantize_score(-1.0, 1.0, 10.0), 0);
+        assert_eq!(JsonlToCiff::quantize_score(0.0, 1.0, 10.0), 0);
+
+        // Test case 2: When min == max (all scores identical)
+        assert_eq!(
+            JsonlToCiff::quantize_score(5.0, 5.0, 5.0),
+            MAX_QUANTIZED_VALUE
+        );
+        assert_eq!(
+            JsonlToCiff::quantize_score(3.14, 3.14, 3.14),
+            MAX_QUANTIZED_VALUE
+        );
+
+        // Test case 3: Score equals minimum should give MIN_QUANTIZED_VALUE
+        assert_eq!(
+            JsonlToCiff::quantize_score(1.0, 1.0, 10.0),
+            MIN_QUANTIZED_VALUE
+        );
+        assert_eq!(
+            JsonlToCiff::quantize_score(0.5, 0.5, 2.0),
+            MIN_QUANTIZED_VALUE
+        );
+
+        // Test case 4: Score equals maximum should give MAX_QUANTIZED_VALUE
+        assert_eq!(
+            JsonlToCiff::quantize_score(10.0, 1.0, 10.0),
+            MAX_QUANTIZED_VALUE
+        );
+        assert_eq!(
+            JsonlToCiff::quantize_score(2.0, 0.5, 2.0),
+            MAX_QUANTIZED_VALUE
+        );
+
+        // Test case 5: Middle values should map proportionally
+        // For range [1.0, 10.0], midpoint 5.5 should map to middle of [1, 255]
+        let mid_score = 5.5;
+        let min = 1.0;
+        let max = 10.0;
+        let quantized = JsonlToCiff::quantize_score(mid_score, min, max);
+        let expected_mid = (MIN_QUANTIZED_VALUE + MAX_QUANTIZED_VALUE) / 2;
+        assert_eq!(quantized, expected_mid);
+
+        // Test case 6: Specific values with known expected results
+        let quarter_score = 3.25; // 25% of the way from 1.0 to 10.0
+        let quantized_quarter = JsonlToCiff::quantize_score(quarter_score, min, max);
+        // Normalized: (3.25 - 1.0) / (10.0 - 1.0) = 0.25
+        // Quantized: 0.25 * 254 + 1 = 64.5 -> rounds to 65
+        assert_eq!(quantized_quarter, 65);
+
+        let three_quarter_score = 7.75; // 75% of the way from 1.0 to 10.0
+        let quantized_three_quarter = JsonlToCiff::quantize_score(three_quarter_score, min, max);
+        // Normalized: (7.75 - 1.0) / (10.0 - 1.0) = 0.75
+        // Quantized: 0.75 * 254 + 1 = 191.5 -> rounds to 192
+        assert_eq!(quantized_three_quarter, 192);
+
+        // Test case 7: Values outside the range should be clamped
+        assert_eq!(
+            JsonlToCiff::quantize_score(15.0, 1.0, 10.0),
+            MAX_QUANTIZED_VALUE
+        ); // Above max
+
+        // Test case 8: Very small range
+        let small_min = 1.0;
+        let small_max = 1.1;
+        assert_eq!(
+            JsonlToCiff::quantize_score(small_min, small_min, small_max),
+            MIN_QUANTIZED_VALUE
+        );
+        assert_eq!(
+            JsonlToCiff::quantize_score(small_max, small_min, small_max),
+            MAX_QUANTIZED_VALUE
+        );
+
+        // Test case 9: Very large range
+        let large_min = 0.001;
+        let large_max = 1000000.0;
+        assert_eq!(
+            JsonlToCiff::quantize_score(large_min, large_min, large_max),
+            MIN_QUANTIZED_VALUE
+        );
+        assert_eq!(
+            JsonlToCiff::quantize_score(large_max, large_min, large_max),
+            MAX_QUANTIZED_VALUE
+        );
+
+        // Test case 10: Edge case - score just above minimum
+        let just_above_min = 1.01;
+        let quantized_just_above = JsonlToCiff::quantize_score(just_above_min, min, max);
+        assert!(quantized_just_above >= MIN_QUANTIZED_VALUE);
+        assert!(quantized_just_above <= MAX_QUANTIZED_VALUE);
+    }
+
+    #[test]
+    #[should_panic(expected = "min_score must be greater than 0")]
+    fn test_quantize_score_invalid_min() {
+        JsonlToCiff::quantize_score(5.0, 0.0, 10.0); // min_score = 0 should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "min_score must be greater than 0")]
+    fn test_quantize_score_negative_min() {
+        JsonlToCiff::quantize_score(5.0, -1.0, 10.0); // negative min_score should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "max_score must be greater than 0")]
+    fn test_quantize_score_invalid_max() {
+        JsonlToCiff::quantize_score(5.0, 1.0, 0.0); // max_score = 0 should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "max_score must be greater than 0")]
+    fn test_quantize_score_negative_max() {
+        JsonlToCiff::quantize_score(5.0, 1.0, -1.0); // negative max_score should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "max_score (0.5) must be >= min_score (1)")]
+    fn test_quantize_score_max_less_than_min() {
+        JsonlToCiff::quantize_score(5.0, 1.0, 0.5); // max_score < min_score should panic
     }
 
     fn header_to_buf(header: &proto::Header) -> Result<Vec<u8>> {
