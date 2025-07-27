@@ -98,15 +98,15 @@ struct ScoreQuantizer {
 
 impl ScoreQuantizer {
     /// Create a new ScoreQuantizer with the given min and max values.
-    /// 
+    ///
     /// # Arguments
     /// * `min` - The minimum score in the dataset (must be > 0)
     /// * `max` - The maximum score in the dataset (must be >= min and > 0)
-    /// 
+    ///
     /// # Returns
     /// * `Ok(ScoreQuantizer)` if the parameters are valid
     /// * `Err(String)` if the parameters are invalid
-    /// 
+    ///
     /// # Errors
     /// Returns an error if min <= 0, max <= 0, or max < min
     fn new(min: f64, max: f64) -> Result<ScoreQuantizer> {
@@ -119,15 +119,15 @@ impl ScoreQuantizer {
         if max < min {
             return Err(anyhow!("max ({}) must be >= min ({})", max, min));
         }
-        
+
         Ok(ScoreQuantizer { min, max })
     }
 
     /// Quantize a score to an 8-bit integer representation.
-    /// 
+    ///
     /// # Arguments
     /// * `score` - The score to quantize
-    /// 
+    ///
     /// # Returns
     /// * `0` if score <= 0 (will be filtered out)
     /// * `MAX_QUANTIZED_VALUE` if min == max (all scores identical)
@@ -912,9 +912,9 @@ impl JsonlToCiff {
 
     /// Find the minimum and maximum scores across all documents in a JSONL file.
     /// Only considers positive scores (> 0.0).
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - The file cannot be opened or read
     /// - No valid scores are found (all scores <= 0 or no documents)
@@ -928,15 +928,15 @@ impl JsonlToCiff {
         let reader = BufReader::new(input_file);
         let mut min_val = f64::INFINITY;
         let mut max_val = f64::NEG_INFINITY;
-        
+
         let pb = ProgressBar::new(total_input_size);
         pb.set_style(pb_style());
-        
+
         for line_result in reader.lines() {
             let line = line_result?;
             let jdoc: JsonDoc = serde_json::from_str(&line)
                 .map_err(|e| anyhow!("Invalid JSON line:\n  `{}`\n  Error: {}", line, e))?;
-            
+
             for (_, score) in jdoc.vector {
                 if score > 0.0 {
                     // Only consider positive scores
@@ -947,11 +947,11 @@ impl JsonlToCiff {
             pb.inc(line.len() as u64 + 1);
         }
         pb.finish();
-        
+
         if min_val.is_infinite() || max_val.is_infinite() {
             return Err(anyhow!("No valid scores found for quantization"));
         }
-        
+
         eprintln!("Score range: {min_val} to {max_val}");
         Ok((min_val, max_val))
     }
@@ -974,7 +974,10 @@ impl JsonlToCiff {
 
         // Create quantizer if quantization is enabled
         let quantizer = if self.quantize {
-            Some(Self::find_score_range(input_path).and_then(|(min, max)| ScoreQuantizer::new(min, max))?)
+            Some(
+                Self::find_score_range(input_path)
+                    .and_then(|(min, max)| ScoreQuantizer::new(min, max))?,
+            )
         } else {
             None
         };
@@ -1032,7 +1035,7 @@ impl JsonlToCiff {
                     // Assume scores are already pre-quantized integers
                     None => score as i32,
                 };
-                
+
                 if tf <= 0 {
                     continue; // skip zero or negative
                 }
@@ -1351,7 +1354,7 @@ mod test {
     fn test_quantize_score() {
         // Test with ScoreQuantizer
         let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
-        
+
         // Test case 1: Negative scores should return 0
         assert_eq!(quantizer.quantize(-1.0), 0);
         assert_eq!(quantizer.quantize(0.0), 0);
@@ -1360,23 +1363,23 @@ mod test {
         let quantizer_same = ScoreQuantizer::new(5.0, 5.0).unwrap();
         assert_eq!(quantizer_same.quantize(5.0), MIN_QUANTIZED_VALUE);
 
-        let quantizer_pi = ScoreQuantizer::new(
-            std::f64::consts::PI,
-            std::f64::consts::PI
-        ).unwrap();
-        assert_eq!(quantizer_pi.quantize(std::f64::consts::PI), MIN_QUANTIZED_VALUE);
+        let quantizer_pi = ScoreQuantizer::new(std::f64::consts::PI, std::f64::consts::PI).unwrap();
+        assert_eq!(
+            quantizer_pi.quantize(std::f64::consts::PI),
+            MIN_QUANTIZED_VALUE
+        );
 
         // Test case 3: Score equals minimum should give MIN_QUANTIZED_VALUE
         let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
         assert_eq!(quantizer.quantize(1.0), MIN_QUANTIZED_VALUE);
-        
+
         let quantizer = ScoreQuantizer::new(0.5, 2.0).unwrap();
         assert_eq!(quantizer.quantize(0.5), MIN_QUANTIZED_VALUE);
 
         // Test case 4: Score equals maximum should give MAX_QUANTIZED_VALUE
         let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
         assert_eq!(quantizer.quantize(10.0), MAX_QUANTIZED_VALUE);
-        
+
         let quantizer = ScoreQuantizer::new(0.5, 2.0).unwrap();
         assert_eq!(quantizer.quantize(2.0), MAX_QUANTIZED_VALUE);
 
@@ -1405,36 +1408,21 @@ mod test {
         assert_eq!(quantized_three_quarter, 192);
 
         // Test case 7: Values outside the range should be clamped
-        assert_eq!(
-            quantizer.quantize(15.0),
-            MAX_QUANTIZED_VALUE
-        ); // Above max
+        assert_eq!(quantizer.quantize(15.0), MAX_QUANTIZED_VALUE); // Above max
 
         // Test case 8: Very small range
         let small_min = 1.0;
         let small_max = 1.1;
         let quantizer = ScoreQuantizer::new(small_min, small_max).unwrap();
-        assert_eq!(
-            quantizer.quantize(small_min),
-            MIN_QUANTIZED_VALUE
-        );
-        assert_eq!(
-            quantizer.quantize(small_max),
-            MAX_QUANTIZED_VALUE
-        );
+        assert_eq!(quantizer.quantize(small_min), MIN_QUANTIZED_VALUE);
+        assert_eq!(quantizer.quantize(small_max), MAX_QUANTIZED_VALUE);
 
         // Test case 9: Very large range
         let large_min = 0.001;
         let large_max = 1000000.0;
         let quantizer = ScoreQuantizer::new(large_min, large_max).unwrap();
-        assert_eq!(
-            quantizer.quantize(large_min),
-            MIN_QUANTIZED_VALUE
-        );
-        assert_eq!(
-            quantizer.quantize(large_max),
-            MAX_QUANTIZED_VALUE
-        );
+        assert_eq!(quantizer.quantize(large_min), MIN_QUANTIZED_VALUE);
+        assert_eq!(quantizer.quantize(large_max), MAX_QUANTIZED_VALUE);
 
         // Test case 10: Edge case - score just above minimum
         let just_above_min = 1.01;
