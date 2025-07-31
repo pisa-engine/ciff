@@ -17,6 +17,8 @@ struct Args {
     output: PathBuf,
     #[structopt(short, long, help = "Quantize scores to integers")]
     quantize: bool,
+    #[structopt(short, long, help = "Quantization bits", default_value = "8")]
+    bits: u32,
 }
 
 fn main() {
@@ -26,7 +28,8 @@ fn main() {
     converter
         .input_path(args.input)
         .output_path(args.output)
-        .quantize(args.quantize);
+        .quantize(args.quantize)
+        .quantization_bits(args.bits);
 
     if let Err(error) = converter.convert() {
         eprintln!("ERROR: {error}");

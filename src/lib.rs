@@ -86,14 +86,14 @@ const DEFAULT_PROGRESS_TEMPLATE: &str =
 
 /// Minimum value for quantized scores.
 const MIN_QUANTIZED_VALUE: i32 = 1;
-/// Maximum value for quantized scores.
-const MAX_QUANTIZED_VALUE: i32 = 255;
+
 /// A quantizer for converting floating-point scores to 8-bit integer representation.
 /// Maps the score range [min, max] to [MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE].
 #[derive(Debug, Clone)]
 struct ScoreQuantizer {
     min: f64,
     max: f64,
+    quantization_bits: u32,
 }
 
 impl ScoreQuantizer {
@@ -109,7 +109,7 @@ impl ScoreQuantizer {
     ///
     /// # Errors
     /// Returns an error if min <= 0, max <= 0, or max < min
-    fn new(min: f64, max: f64) -> Result<ScoreQuantizer> {
+    fn new(min: f64, max: f64, quantization_bits: u32) -> Result<ScoreQuantizer> {
         if min <= 0.0 {
             return Err(anyhow!("min must be greater than 0, got {}", min));
         }
@@ -119,8 +119,11 @@ impl ScoreQuantizer {
         if max < min {
             return Err(anyhow!("max ({}) must be >= min ({})", max, min));
         }
+        if quantization_bits < 1 || quantization_bits > 32 {
+            return Err(anyhow!("quantization_bits must be between 1 and 32, got {}", quantization_bits));
+        }
 
-        Ok(ScoreQuantizer { min, max })
+        Ok(ScoreQuantizer { min, max, quantization_bits })
     }
 
     /// Quantize a score to an 8-bit integer representation.
@@ -133,6 +136,7 @@ impl ScoreQuantizer {
     /// * `MAX_QUANTIZED_VALUE` if min == max (all scores identical)
     /// * Quantized value in range [MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE] otherwise
     fn quantize(&self, score: f64) -> i32 {
+        let max_quantized_value = (1 << self.quantization_bits) - 1;
         if score <= 0.0 {
             0 // Will be filtered out
         } else if self.min == self.max {
@@ -140,10 +144,10 @@ impl ScoreQuantizer {
             MIN_QUANTIZED_VALUE
         } else {
             let normalized = (score - self.min) / (self.max - self.min);
-            let quantization_range = MAX_QUANTIZED_VALUE - MIN_QUANTIZED_VALUE;
+            let quantization_range = max_quantized_value - MIN_QUANTIZED_VALUE;
             let quantized = (normalized * quantization_range as f64 + MIN_QUANTIZED_VALUE as f64)
                 .round() as i32;
-            quantized.clamp(MIN_QUANTIZED_VALUE, MAX_QUANTIZED_VALUE)
+            quantized.clamp(MIN_QUANTIZED_VALUE, max_quantized_value)
         }
     }
 }
@@ -886,6 +890,7 @@ pub struct JsonlToCiff {
     input: Option<PathBuf>,
     output: Option<PathBuf>,
     quantize: bool,
+    quantization_bits: u32,
 }
 
 impl JsonlToCiff {
@@ -907,6 +912,13 @@ impl JsonlToCiff {
     /// Default is false.
     pub fn quantize(&mut self, quantize: bool) -> &mut Self {
         self.quantize = quantize;
+        self
+    }
+
+    /// Set the number of bits to use for quantization.
+    /// Default is 8.
+    pub fn quantization_bits(&mut self, quantization_bits: u32) -> &mut Self {
+        self.quantization_bits = quantization_bits;
         self
     }
 
@@ -976,7 +988,7 @@ impl JsonlToCiff {
         let quantizer = if self.quantize {
             Some(
                 Self::find_score_range(input_path)
-                    .and_then(|(min, max)| ScoreQuantizer::new(min, max))?,
+                    .and_then(|(min, max)| ScoreQuantizer::new(min, max, self.quantization_bits))?,
             )
         } else {
             None
@@ -1029,8 +1041,8 @@ impl JsonlToCiff {
             let mut doc_length = 0i64;
             for (term, score) in jdoc.vector {
                 let tf = match &quantizer {
-                    // 8-bit scalar quantization: map [min_score, max_score] to [1, 255]
-                    // We use 1-255 to avoid zero values which get filtered out
+                    // 8-bit scalar quantization: map [min_score, max_score] to [1, 2^quantization_bits - 1]
+                    // We use 1-2^quantization_bits-1 to avoid zero values which get filtered out
                     Some(quantizer) => quantizer.quantize(score),
                     // Assume scores are already pre-quantized integers
                     None => score as i32,
@@ -1337,7 +1349,8 @@ mod test {
         converter
             .input_path(temp_input.path())
             .output_path(temp_output.path())
-            .quantize(true);
+            .quantize(true)
+            .quantization_bits(8);
 
         // This should succeed and handle the min == max case correctly
         let result = converter.convert();
@@ -1353,49 +1366,49 @@ mod test {
     #[test]
     fn test_quantize_score() {
         // Test with ScoreQuantizer
-        let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
+        let quantizer = ScoreQuantizer::new(1.0, 10.0, 8).unwrap();
 
         // Test case 1: Negative scores should return 0
         assert_eq!(quantizer.quantize(-1.0), 0);
         assert_eq!(quantizer.quantize(0.0), 0);
 
         // Test case 2: When min == max (all scores identical)
-        let quantizer_same = ScoreQuantizer::new(5.0, 5.0).unwrap();
+        let quantizer_same = ScoreQuantizer::new(5.0, 5.0, 8).unwrap();
         assert_eq!(quantizer_same.quantize(5.0), MIN_QUANTIZED_VALUE);
 
-        let quantizer_pi = ScoreQuantizer::new(std::f64::consts::PI, std::f64::consts::PI).unwrap();
+        let quantizer_pi = ScoreQuantizer::new(std::f64::consts::PI, std::f64::consts::PI, 8).unwrap();
         assert_eq!(
             quantizer_pi.quantize(std::f64::consts::PI),
             MIN_QUANTIZED_VALUE
         );
 
         // Test case 3: Score equals minimum should give MIN_QUANTIZED_VALUE
-        let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
+        let quantizer = ScoreQuantizer::new(1.0, 10.0, 8).unwrap();
         assert_eq!(quantizer.quantize(1.0), MIN_QUANTIZED_VALUE);
 
-        let quantizer = ScoreQuantizer::new(0.5, 2.0).unwrap();
+        let quantizer = ScoreQuantizer::new(0.5, 2.0, 8).unwrap();
         assert_eq!(quantizer.quantize(0.5), MIN_QUANTIZED_VALUE);
 
         // Test case 4: Score equals maximum should give MAX_QUANTIZED_VALUE
-        let quantizer = ScoreQuantizer::new(1.0, 10.0).unwrap();
-        assert_eq!(quantizer.quantize(10.0), MAX_QUANTIZED_VALUE);
+        let quantizer = ScoreQuantizer::new(1.0, 10.0, 8).unwrap();
+        assert_eq!(quantizer.quantize(10.0), 255);
 
-        let quantizer = ScoreQuantizer::new(0.5, 2.0).unwrap();
-        assert_eq!(quantizer.quantize(2.0), MAX_QUANTIZED_VALUE);
+        let quantizer = ScoreQuantizer::new(0.5, 2.0, 8).unwrap();
+        assert_eq!(quantizer.quantize(2.0), 255);
 
         // Test case 5: Middle values should map proportionally
         // For range [1.0, 10.0], midpoint 5.5 should map to middle of [1, 255]
         let mid_score = 5.5;
         let min = 1.0;
         let max = 10.0;
-        let quantizer = ScoreQuantizer::new(min, max).unwrap();
+        let quantizer = ScoreQuantizer::new(min, max, 8).unwrap();
         let quantized = quantizer.quantize(mid_score);
-        let expected_mid = (MIN_QUANTIZED_VALUE + MAX_QUANTIZED_VALUE) / 2;
+        let expected_mid = (MIN_QUANTIZED_VALUE + 255) / 2;
         assert_eq!(quantized, expected_mid);
 
         // Test case 6: Specific values with known expected results
         let quarter_score = 3.25; // 25% of the way from 1.0 to 10.0
-        let quantizer = ScoreQuantizer::new(min, max).unwrap();
+        let quantizer = ScoreQuantizer::new(min, max, 8).unwrap();
         let quantized_quarter = quantizer.quantize(quarter_score);
         // Normalized: (3.25 - 1.0) / (10.0 - 1.0) = 0.25
         // Quantized: 0.25 * 254 + 1 = 64.5 -> rounds to 65
@@ -1408,62 +1421,62 @@ mod test {
         assert_eq!(quantized_three_quarter, 192);
 
         // Test case 7: Values outside the range should be clamped
-        assert_eq!(quantizer.quantize(15.0), MAX_QUANTIZED_VALUE); // Above max
+        assert_eq!(quantizer.quantize(15.0), 255); // Above max
 
         // Test case 8: Very small range
         let small_min = 1.0;
         let small_max = 1.1;
-        let quantizer = ScoreQuantizer::new(small_min, small_max).unwrap();
+        let quantizer = ScoreQuantizer::new(small_min, small_max, 8).unwrap();
         assert_eq!(quantizer.quantize(small_min), MIN_QUANTIZED_VALUE);
-        assert_eq!(quantizer.quantize(small_max), MAX_QUANTIZED_VALUE);
+        assert_eq!(quantizer.quantize(small_max), 255);
 
         // Test case 9: Very large range
         let large_min = 0.001;
         let large_max = 1000000.0;
-        let quantizer = ScoreQuantizer::new(large_min, large_max).unwrap();
+        let quantizer = ScoreQuantizer::new(large_min, large_max, 8).unwrap();
         assert_eq!(quantizer.quantize(large_min), MIN_QUANTIZED_VALUE);
-        assert_eq!(quantizer.quantize(large_max), MAX_QUANTIZED_VALUE);
+        assert_eq!(quantizer.quantize(large_max), 255);
 
         // Test case 10: Edge case - score just above minimum
         let just_above_min = 1.01;
-        let quantizer = ScoreQuantizer::new(min, max).unwrap();
+        let quantizer = ScoreQuantizer::new(min, max, 8).unwrap();
         let quantized_just_above = quantizer.quantize(just_above_min);
         assert!(quantized_just_above >= MIN_QUANTIZED_VALUE);
-        assert!(quantized_just_above <= MAX_QUANTIZED_VALUE);
+        assert!(quantized_just_above <= 255);
     }
 
     #[test]
     #[should_panic(expected = "min must be greater than 0")]
     fn test_quantize_score_invalid_min() {
-        ScoreQuantizer::new(0.0, 10.0).unwrap(); // min = 0 should panic
+        ScoreQuantizer::new(0.0, 10.0, 8).unwrap(); // min = 0 should panic
     }
 
     #[test]
     #[should_panic(expected = "min must be greater than 0")]
     fn test_quantize_score_negative_min() {
-        ScoreQuantizer::new(-1.0, 10.0).unwrap(); // negative min should panic
+        ScoreQuantizer::new(-1.0, 10.0, 8).unwrap(); // negative min should panic
     }
 
     #[test]
     #[should_panic(expected = "max must be greater than 0")]
     fn test_quantize_score_invalid_max() {
-        ScoreQuantizer::new(1.0, 0.0).unwrap(); // max = 0 should panic
+        ScoreQuantizer::new(1.0, 0.0, 8).unwrap(); // max = 0 should panic
     }
 
     #[test]
     #[should_panic(expected = "max must be greater than 0")]
     fn test_quantize_score_negative_max() {
-        ScoreQuantizer::new(1.0, -1.0).unwrap(); // negative max should panic
+        ScoreQuantizer::new(1.0, -1.0, 8).unwrap(); // negative max should panic
     }
 
     #[test]
     fn test_score_quantizer_validation() {
         // Test validation errors
-        assert!(ScoreQuantizer::new(0.0, 10.0).is_err()); // min = 0 should fail
-        assert!(ScoreQuantizer::new(-1.0, 10.0).is_err()); // negative min should fail
-        assert!(ScoreQuantizer::new(1.0, 0.0).is_err()); // max = 0 should fail
-        assert!(ScoreQuantizer::new(1.0, -1.0).is_err()); // negative max should fail
-        assert!(ScoreQuantizer::new(1.0, 0.5).is_err()); // max < min should fail
+        assert!(ScoreQuantizer::new(0.0, 10.0, 8).is_err()); // min = 0 should fail
+        assert!(ScoreQuantizer::new(-1.0, 10.0, 8).is_err()); // negative min should fail
+        assert!(ScoreQuantizer::new(1.0, 0.0, 8).is_err()); // max = 0 should fail
+        assert!(ScoreQuantizer::new(1.0, -1.0, 8).is_err()); // negative max should fail
+        assert!(ScoreQuantizer::new(1.0, 0.5, 8).is_err()); // max < min should fail
     }
 
     fn header_to_buf(header: &proto::Header) -> Result<Vec<u8>> {
@@ -1512,5 +1525,13 @@ mod test {
         let mut input = CodedInputStream::from_bytes(&buffer);
         assert!(Header::from_stream(&mut input).is_err());
         Ok(())
+    }
+
+    #[test]
+    // quantize with 16 bits
+    fn test_quantize_score_16_bits() {
+        let quantizer = ScoreQuantizer::new(1.0, 10.0, 16).unwrap();
+        assert_eq!(quantizer.quantize(1.0), MIN_QUANTIZED_VALUE);
+        assert_eq!(quantizer.quantize(10.0), 65535);
     }
 }
