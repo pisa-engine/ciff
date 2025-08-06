@@ -57,7 +57,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use memmap::Mmap;
 use num_traits::ToPrimitive;
 use protobuf::{CodedInputStream, CodedOutputStream};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -880,7 +880,7 @@ where
     }
 }
 
-/// PISA to CIFF converter.
+/// JSONL to CIFF converter.
 #[derive(Debug, Default, Clone)]
 pub struct JsonlToCiff {
     input: Option<PathBuf>,
@@ -1140,6 +1140,129 @@ impl JsonlToCiff {
         eprintln!(
             "Wrote {num_docs} documents and {num_postings_lists} postings lists to {output_path:?}"
         );
+
+        Ok(())
+    }
+}
+
+/// CIFF to JSONL converter.
+#[derive(Debug, Default, Clone)]
+pub struct CiffToJsonl {
+    input: Option<PathBuf>,
+    output: Option<PathBuf>,
+}
+
+// Note that the keys "id" and "vector" are currently commonly used when sharing
+// json files for learned sparse retrieval systems. As such, we follow this
+// same naming convention
+#[derive(Serialize)]
+struct JsonRecord {
+    id: String,
+    vector: HashMap<String, u32>,
+}
+
+impl CiffToJsonl {
+    /// Set the path of the CIFF file. Required.
+    pub fn input_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.input = Some(path.into());
+        self
+    }
+
+    /// Set the output JSONL file path. Required.
+    pub fn output_path<P: Into<PathBuf>>(&mut self, path: P) -> &mut Self {
+        self.output = Some(path.into());
+        self
+    }
+
+    /// Performs the conversion from CIFF to JSONL.
+    ///
+    /// # Errors
+    ///
+    /// If the input / output is invalid or any I/O / parsing error occurs,
+    /// returns an error.
+    pub fn convert(&self) -> Result<()> {
+        let input_path = self
+            .input
+            .as_ref()
+            .ok_or_else(|| anyhow!("No CIFF input path was set"))?;
+        let output_path = self
+            .output
+            .as_ref()
+            .ok_or_else(|| anyhow!("No JSON output path was set"))?;
+
+        // Open the CIFF file for processing
+        let mut input_file =
+            File::open(input_path).with_context(|| format!("Cannot open {input_path:?}"))?;
+        let mut reader = CodedInputStream::new(&mut input_file);
+
+        let header = Header::from_stream(&mut reader)?;
+        println!("{header}");
+
+        // We'll map "docid" -> (term, tf).
+        // Because CIFF uses integer tf, we convert scores to i32.
+        let mut fwd_idx: HashMap<u32, Vec<(String, u32)>> = HashMap::new();
+
+        // Map from an internal integer docid to a string "collection" docid.
+        let mut docid_map: HashMap<u32, String> = HashMap::new();
+
+        // 1. Map the postings back into a forward index
+        let progress = ProgressBar::new(u64::from(header.num_postings_lists));
+        progress.set_style(pb_style());
+        progress.set_draw_delta(10);
+        for _ in 0..header.num_postings_lists {
+            let postings_list = reader.read_message::<PostingsList>()?;
+            let term = postings_list.get_term();
+            let postings = postings_list.get_postings();
+
+            let mut docid = 0_u32;
+            for p in postings.iter() {
+                let delta = u32::try_from(p.get_docid()).expect("Negative ID");
+                docid += delta;
+                let impact = u32::try_from(p.get_tf()).expect("Negative TF");
+                fwd_idx
+                    .entry(docid)
+                    .or_default()
+                    .push((term.to_string(), impact));
+            }
+
+            progress.inc(1);
+        }
+        progress.finish();
+
+        // 2. Read textual docids
+        let progress = ProgressBar::new(u64::from(header.num_documents));
+        progress.set_style(pb_style());
+        progress.set_draw_delta(10);
+        // build the mapping from internal to external identifier
+        for _ in 0..header.num_documents {
+            let doc_record = reader.read_message::<DocRecord>()?;
+
+            let docid: u32 = doc_record
+                .get_docid()
+                .to_u32()
+                .ok_or_else(|| anyhow!("Cannot cast docid to u32: {}", doc_record.get_docid()))?;
+
+            let trecid = doc_record.get_collection_docid();
+            docid_map.insert(docid, trecid.to_string());
+            progress.inc(1);
+        }
+        progress.finish();
+
+        // 3. Prepare and write json objects for each document
+        let outfile = File::create(output_path)?;
+        let mut writer = BufWriter::new(outfile);
+        let progress = ProgressBar::new(u64::from(header.num_documents));
+        progress.set_style(pb_style());
+        progress.set_draw_delta(10);
+        for (int_id, docvec) in fwd_idx {
+            let vector: HashMap<String, u32> = docvec.into_iter().collect();
+            let id = docid_map.get(&int_id).expect("Docid not found").to_string();
+            let record = JsonRecord { id, vector };
+            let json_line = serde_json::to_string(&record).unwrap();
+            writeln!(writer, "{json_line}")?;
+            progress.inc(1);
+        }
+        progress.finish();
 
         Ok(())
     }
