@@ -57,7 +57,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use memmap::Mmap;
 use num_traits::ToPrimitive;
 use protobuf::{CodedInputStream, CodedOutputStream};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -1154,7 +1154,7 @@ pub struct CiffToJsonl {
 
 // Note that the keys "id" and "vector" are currently commonly used when sharing
 // json files for learned sparse retrieval systems. As such, we follow this
-// same naming convention 
+// same naming convention
 #[derive(Serialize)]
 struct JsonRecord {
     id: String,
@@ -1210,7 +1210,7 @@ impl CiffToJsonl {
         progress.set_style(pb_style());
         progress.set_draw_delta(10);
         for _ in 0..header.num_postings_lists {
-            let postings_list = reader.read_message::<PostingsList>()?; 
+            let postings_list = reader.read_message::<PostingsList>()?;
             let term = postings_list.get_term();
             let postings = postings_list.get_postings();
 
@@ -1219,11 +1219,14 @@ impl CiffToJsonl {
                 let delta = u32::try_from(p.get_docid()).expect("Negative ID");
                 docid += delta;
                 let impact = u32::try_from(p.get_tf()).expect("Negative TF");
-                fwd_idx.entry(docid).or_insert_with(Vec::new).push( (term.to_string(), impact) );
+                fwd_idx
+                    .entry(docid)
+                    .or_insert_with(Vec::new)
+                    .push((term.to_string(), impact));
             }
- 
+
             progress.inc(1);
-        }   
+        }
         progress.finish();
 
         // 2. Read textual docids
@@ -1240,7 +1243,7 @@ impl CiffToJsonl {
                 .ok_or_else(|| anyhow!("Cannot cast docid to u32: {}", doc_record.get_docid()))?;
 
             let trecid = doc_record.get_collection_docid();
-            docid_map.insert(docid, trecid.to_string()); 
+            docid_map.insert(docid, trecid.to_string());
             progress.inc(1);
         }
         progress.finish();
@@ -1254,17 +1257,16 @@ impl CiffToJsonl {
         for (int_id, docvec) in fwd_idx {
             let vector: HashMap<String, u32> = docvec.into_iter().collect();
             let id = docid_map.get(&int_id).expect("Docid not found").to_string();
-            let record = JsonRecord { id , vector };
+            let record = JsonRecord { id, vector };
             let json_line = serde_json::to_string(&record).unwrap();
             writeln!(writer, "{}", json_line)?;
             progress.inc(1);
         }
         progress.finish();
-       
+
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod test {
