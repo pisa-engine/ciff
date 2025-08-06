@@ -1221,7 +1221,7 @@ impl CiffToJsonl {
                 let impact = u32::try_from(p.get_tf()).expect("Negative TF");
                 fwd_idx
                     .entry(docid)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((term.to_string(), impact));
             }
 
@@ -1259,7 +1259,7 @@ impl CiffToJsonl {
             let id = docid_map.get(&int_id).expect("Docid not found").to_string();
             let record = JsonRecord { id, vector };
             let json_line = serde_json::to_string(&record).unwrap();
-            writeln!(writer, "{}", json_line)?;
+            writeln!(writer, "{json_line}")?;
             progress.inc(1);
         }
         progress.finish();
