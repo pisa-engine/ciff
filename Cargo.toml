@@ -23,6 +23,11 @@ path = "src/pisa2ciff.rs"
 name = "jsonl2ciff"
 path = "src/jsonl2ciff.rs"
 
+[[bin]]
+name = "ciff2jsonl"
+path = "src/ciff2jsonl.rs"
+
+
 [dependencies]
 protobuf = "2.28.0"
 structopt = "0.3"

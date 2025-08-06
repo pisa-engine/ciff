@@ -7,8 +7,8 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "pisa2ciff",
-    about = "Convert a PISA index to a Common Index Format [v1]"
+    name = "jsonl2ciff",
+    about = "Convert a jsonl file into the Common Index Format [v1]"
 )]
 struct Args {
     #[structopt(short, long, help = "Path to jsonl file")]
